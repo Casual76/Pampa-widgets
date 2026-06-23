@@ -15,20 +15,20 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.0",
+      "version": "0.2.1",
       "releaseDate": "2026-06-23",
-      "changelog": "Primo widget reale: Media Controls per Spotify, YouTube Music e sessioni multimediali Android, con controlli play/pausa, avanti, indietro, permesso media guidato e aggiunta alla home.",
-      "releaseTag": "stable-pampa-widgets-v0.2.0",
-      "apkAsset": "pampa-widgets-0.2.0.apk",
+      "changelog": "Corretto il widget Media Controls su launcher reali: layout RemoteViews piu compatibile, niente Space non supportati, dimensioni minime piu permissive e aggiornamenti widget piu robusti.",
+      "releaseTag": "stable-pampa-widgets-v0.2.1",
+      "apkAsset": "pampa-widgets-0.2.1.apk",
       "exeAsset": "",
       "sizeBytes": 52216672
     },
     "beta": {
-      "version": "0.2.0",
+      "version": "0.2.1",
       "releaseDate": "2026-06-23",
-      "changelog": "Primo widget reale: Media Controls per Spotify, YouTube Music e sessioni multimediali Android, con controlli play/pausa, avanti, indietro, permesso media guidato e aggiunta alla home.",
-      "releaseTag": "stable-pampa-widgets-v0.2.0",
-      "apkAsset": "pampa-widgets-0.2.0.apk",
+      "changelog": "Corretto il widget Media Controls su launcher reali: layout RemoteViews piu compatibile, niente Space non supportati, dimensioni minime piu permissive e aggiornamenti widget piu robusti.",
+      "releaseTag": "stable-pampa-widgets-v0.2.1",
+      "apkAsset": "pampa-widgets-0.2.1.apk",
       "exeAsset": "",
       "sizeBytes": 52216672
     },
