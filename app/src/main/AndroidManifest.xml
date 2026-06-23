@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+  <application
+    android:name=".PampaWidgetsApp"
+    android:allowBackup="true"
+    android:enableOnBackInvokedCallback="true"
+    android:icon="@mipmap/ic_launcher"
+    android:label="@string/app_name"
+    android:roundIcon="@mipmap/ic_launcher_round"
+    android:supportsRtl="true"
+    android:theme="@style/Theme.PampaWidgets"
+    android:usesCleartextTraffic="false">
+
+    <activity
+      android:name=".MainActivity"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+
+    <receiver
+      android:name=".core.update.AppUpdateInstallResultReceiver"
+      android:exported="false" />
+
+    <receiver
+      android:name=".widget.media.MediaWidgetProvider"
+      android:exported="true"
+      android:label="@string/media_widget_name">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/media_widget_info" />
+    </receiver>
+
+    <service
+      android:name=".widget.media.MediaNotificationListenerService"
+      android:exported="true"
+      android:label="@string/media_widget_name"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+  </application>
+
+</manifest>

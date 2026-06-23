@@ -1,0 +1,39 @@
+{
+  "app": {
+    "id": "pampa-widgets",
+    "name": "Pampa Widgets",
+    "description": "Store locale Material 3 Expressive per widget Android creati da Pampa.",
+    "packageName": "com.pampa.widgets",
+    "iconUrl": "",
+    "category": "Tools",
+    "developer": "Pampa",
+    "screenshots": [],
+    "repository": {
+      "repoOwner": "Casual76",
+      "repoName": "Pampa-widgets",
+      "manifestPath": "manifest.json",
+      "ref": ""
+    },
+    "stable": {
+      "version": "0.2.0",
+      "releaseDate": "2026-06-23",
+      "changelog": "Primo widget reale: Media Controls per Spotify, YouTube Music e sessioni multimediali Android, con controlli play/pausa, avanti, indietro, permesso media guidato e aggiunta alla home.",
+      "releaseTag": "stable-pampa-widgets-v0.2.0",
+      "apkAsset": "pampa-widgets-0.2.0.apk",
+      "exeAsset": "",
+      "sizeBytes": 52216672
+    },
+    "beta": null,
+    "history": [
+      {
+        "version": "0.1.0",
+        "releaseDate": "2026-06-23",
+        "changelog": "Infrastruttura iniziale Material 3 Expressive, store vuoto, registry widget e updater Pampa Store.",
+        "releaseTag": "stable-pampa-widgets-v0.1.0",
+        "apkAsset": "pampa-widgets-0.1.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      }
+    ]
+  }
+}

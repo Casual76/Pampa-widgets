@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Pampa Widgets</string>
+  <string name="media_widget_name">Media Controls</string>
+  <string name="media_widget_description">Controlli multimediali per Spotify, YouTube Music e sessioni Android attive.</string>
+</resources>
