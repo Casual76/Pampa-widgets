@@ -28,13 +28,10 @@
         android:src="@drawable/ic_widget_music_note" />
     </FrameLayout>
 
-    <Space
-      android:layout_width="14dp"
-      android:layout_height="1dp" />
-
     <LinearLayout
       android:layout_width="0dp"
       android:layout_height="match_parent"
+      android:layout_marginStart="14dp"
       android:layout_weight="1"
       android:gravity="center_vertical"
       android:orientation="vertical">
@@ -108,41 +105,31 @@
           android:padding="9dp"
           android:src="@drawable/ic_widget_previous" />
 
-        <Space
-          android:layout_width="8dp"
-          android:layout_height="1dp" />
-
         <ImageButton
           android:id="@+id/media_widget_play_pause"
           android:layout_width="46dp"
           android:layout_height="46dp"
+          android:layout_marginStart="8dp"
           android:background="@drawable/bg_media_control_primary"
           android:contentDescription="Play pausa"
           android:padding="10dp"
           android:src="@drawable/ic_widget_play" />
 
-        <Space
-          android:layout_width="8dp"
-          android:layout_height="1dp" />
-
         <ImageButton
           android:id="@+id/media_widget_next"
           android:layout_width="38dp"
           android:layout_height="38dp"
+          android:layout_marginStart="8dp"
           android:background="@drawable/bg_media_control"
           android:contentDescription="Traccia successiva"
           android:padding="9dp"
           android:src="@drawable/ic_widget_next" />
 
-        <Space
-          android:layout_width="0dp"
-          android:layout_height="1dp"
-          android:layout_weight="1" />
-
         <ImageButton
           android:id="@+id/media_widget_refresh"
           android:layout_width="34dp"
           android:layout_height="34dp"
+          android:layout_marginStart="14dp"
           android:background="@drawable/bg_media_control"
           android:contentDescription="Aggiorna"
           android:padding="8dp"

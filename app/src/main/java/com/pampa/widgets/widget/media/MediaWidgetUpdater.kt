@@ -51,13 +51,6 @@ object MediaWidgetUpdater {
       R.id.media_widget_play_pause,
       if (snapshot.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
     )
-    views.setBoolean(R.id.media_widget_previous, "setEnabled", snapshot.canSkipPrevious)
-    views.setBoolean(R.id.media_widget_next, "setEnabled", snapshot.canSkipNext)
-    views.setBoolean(
-      R.id.media_widget_play_pause,
-      "setEnabled",
-      snapshot.canPlayPause || snapshot.availability != MediaPlaybackAvailability.Active,
-    )
 
     if (snapshot.artwork != null) {
       views.setImageViewBitmap(R.id.media_widget_artwork, snapshot.artwork)
