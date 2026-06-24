@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.1",
-      "releaseDate": "2026-06-23",
-      "changelog": "Corretto il widget Media Controls su launcher reali: layout RemoteViews piu compatibile, niente Space non supportati, dimensioni minime piu permissive e aggiornamenti widget piu robusti.",
-      "releaseTag": "stable-pampa-widgets-v0.2.1",
-      "apkAsset": "pampa-widgets-0.2.1.apk",
+      "version": "0.2.2",
+      "releaseDate": "2026-06-24",
+      "changelog": "Restyling completo del widget Media Controls: superficie chiara semitrasparente in stile sistema, controlli piu morbidi, source chip leggero, artwork piu pulito e layout meno invasivo sulla home.",
+      "releaseTag": "stable-pampa-widgets-v0.2.2",
+      "apkAsset": "pampa-widgets-0.2.2.apk",
       "exeAsset": "",
       "sizeBytes": 52216672
     },
     "beta": {
-      "version": "0.2.1",
-      "releaseDate": "2026-06-23",
-      "changelog": "Corretto il widget Media Controls su launcher reali: layout RemoteViews piu compatibile, niente Space non supportati, dimensioni minime piu permissive e aggiornamenti widget piu robusti.",
-      "releaseTag": "stable-pampa-widgets-v0.2.1",
-      "apkAsset": "pampa-widgets-0.2.1.apk",
+      "version": "0.2.2",
+      "releaseDate": "2026-06-24",
+      "changelog": "Restyling completo del widget Media Controls: superficie chiara semitrasparente in stile sistema, controlli piu morbidi, source chip leggero, artwork piu pulito e layout meno invasivo sulla home.",
+      "releaseTag": "stable-pampa-widgets-v0.2.2",
+      "apkAsset": "pampa-widgets-0.2.2.apk",
       "exeAsset": "",
       "sizeBytes": 52216672
     },
     "history": [
+      {
+        "version": "0.2.1",
+        "releaseDate": "2026-06-23",
+        "changelog": "Corretto il widget Media Controls su launcher reali: layout RemoteViews piu compatibile, niente Space non supportati, dimensioni minime piu permissive e aggiornamenti widget piu robusti.",
+        "releaseTag": "stable-pampa-widgets-v0.2.1",
+        "apkAsset": "pampa-widgets-0.2.1.apk",
+        "exeAsset": "",
+        "sizeBytes": 52216672
+      },
       {
         "version": "0.2.0",
         "releaseDate": "2026-06-23",
