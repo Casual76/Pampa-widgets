@@ -20,16 +20,19 @@ class MediaWidgetProvider : AppWidgetProvider() {
     super.onReceive(context, intent)
     when (intent.action) {
       ActionTogglePlayPause -> {
+        val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.TogglePlayPause)
         MediaSessionReader.dispatch(context, MediaControlAction.TogglePlayPause)
-        MediaWidgetUpdater.updateAll(context)
+        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.TogglePlayPause, feedbackSnapshot)
       }
       ActionNext -> {
+        val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.Next)
         MediaSessionReader.dispatch(context, MediaControlAction.Next)
-        MediaWidgetUpdater.updateAll(context)
+        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Next, feedbackSnapshot)
       }
       ActionPrevious -> {
+        val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.Previous)
         MediaSessionReader.dispatch(context, MediaControlAction.Previous)
-        MediaWidgetUpdater.updateAll(context)
+        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Previous, feedbackSnapshot)
       }
       ActionRefresh -> MediaWidgetUpdater.updateAll(context)
     }

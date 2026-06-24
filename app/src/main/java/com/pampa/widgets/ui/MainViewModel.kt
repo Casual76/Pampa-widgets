@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.pampa.widgets.BuildConfig
 import com.pampa.widgets.core.media.NotificationListenerAccess
 import com.pampa.widgets.core.settings.AppSettings
+import com.pampa.widgets.core.settings.MediaWidgetArtworkSize
+import com.pampa.widgets.core.settings.MediaWidgetTheme
 import com.pampa.widgets.core.settings.SettingsRepository
 import com.pampa.widgets.core.settings.StoreLayout
 import com.pampa.widgets.core.settings.ThemeMode
@@ -19,6 +21,7 @@ import com.pampa.widgets.core.widget.WidgetPinResult
 import com.pampa.widgets.core.widget.WidgetPinService
 import com.pampa.widgets.core.widget.WidgetRegistry
 import com.pampa.widgets.core.widget.filterAndSortWidgets
+import com.pampa.widgets.widget.media.MediaWidgetUpdater
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -129,6 +132,62 @@ class MainViewModel @Inject constructor(
 
   fun setAutomaticUpdateChecksEnabled(enabled: Boolean) {
     viewModelScope.launch { settingsRepository.setAutomaticUpdateChecksEnabled(enabled) }
+  }
+
+  fun setMediaWidgetTheme(theme: MediaWidgetTheme) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetTheme(theme)
+      MediaWidgetUpdater.updateAll(context)
+    }
+  }
+
+  fun setMediaWidgetArtworkSize(size: MediaWidgetArtworkSize) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetArtworkSize(size)
+      MediaWidgetUpdater.updateAll(context)
+    }
+  }
+
+  fun setMediaWidgetBlurBackground(enabled: Boolean) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetBlurBackground(enabled)
+      MediaWidgetUpdater.updateAll(context)
+    }
+  }
+
+  fun setMediaWidgetShowSource(enabled: Boolean) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetShowSource(enabled)
+      MediaWidgetUpdater.updateAll(context)
+    }
+  }
+
+  fun setMediaWidgetShowArtist(enabled: Boolean) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetShowArtist(enabled)
+      MediaWidgetUpdater.updateAll(context)
+    }
+  }
+
+  fun setMediaWidgetKeepLastSong(enabled: Boolean) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetKeepLastSong(enabled)
+      MediaWidgetUpdater.updateAll(context)
+    }
+  }
+
+  fun setMediaWidgetInstantControls(enabled: Boolean) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetInstantControls(enabled)
+      MediaWidgetUpdater.updateAll(context)
+    }
+  }
+
+  fun setMediaWidgetAnimatedFeedback(enabled: Boolean) {
+    viewModelScope.launch {
+      settingsRepository.setMediaWidgetAnimatedFeedback(enabled)
+      MediaWidgetUpdater.updateAll(context)
+    }
   }
 
   fun checkForUpdate(showNoUpdateMessage: Boolean = true) {

@@ -29,6 +29,14 @@ class SettingsRepositoryTest {
     repository.setWidgetSortMode(WidgetSortMode.Name)
     repository.setIgnoredStableUpdateVersion("1.2.3")
     repository.setAutomaticUpdateChecksEnabled(false)
+    repository.setMediaWidgetTheme(MediaWidgetTheme.AlbumColor)
+    repository.setMediaWidgetArtworkSize(MediaWidgetArtworkSize.Compact)
+    repository.setMediaWidgetBlurBackground(false)
+    repository.setMediaWidgetShowSource(false)
+    repository.setMediaWidgetShowArtist(false)
+    repository.setMediaWidgetKeepLastSong(false)
+    repository.setMediaWidgetInstantControls(false)
+    repository.setMediaWidgetAnimatedFeedback(false)
 
     val settings = repository.observeSettings().first()
 
@@ -38,5 +46,13 @@ class SettingsRepositoryTest {
     assertEquals(WidgetSortMode.Name, settings.widgetSortMode)
     assertEquals("1.2.3", settings.ignoredStableUpdateVersion)
     assertFalse(settings.automaticUpdateChecksEnabled)
+    assertEquals(MediaWidgetTheme.AlbumColor, settings.mediaWidgetTheme)
+    assertEquals(MediaWidgetArtworkSize.Compact, settings.mediaWidgetArtworkSize)
+    assertFalse(settings.mediaWidgetBlurBackground)
+    assertFalse(settings.mediaWidgetShowSource)
+    assertFalse(settings.mediaWidgetShowArtist)
+    assertFalse(settings.mediaWidgetKeepLastSong)
+    assertFalse(settings.mediaWidgetInstantControls)
+    assertFalse(settings.mediaWidgetAnimatedFeedback)
   }
 }

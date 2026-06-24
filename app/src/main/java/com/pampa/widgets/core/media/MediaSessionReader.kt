@@ -1,5 +1,6 @@
 package com.pampa.widgets.core.media
 
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
@@ -7,10 +8,14 @@ import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.SystemClock
 import com.pampa.widgets.widget.media.MediaNotificationListenerService
 
 object MediaSessionReader {
-  fun readSnapshot(context: Context): MediaPlaybackSnapshot {
+  fun readSnapshot(
+    context: Context,
+    keepLastSong: Boolean = true,
+  ): MediaPlaybackSnapshot {
     if (!NotificationListenerAccess.isGranted(context)) {
       return MediaPlaybackSnapshot(
         availability = MediaPlaybackAvailability.PermissionRequired,
@@ -25,25 +30,30 @@ object MediaSessionReader {
       title = "Nessuna riproduzione",
       artist = "Apri Spotify, Apple Music o YouTube Music.",
       sourceLabel = "In attesa",
-    ).let { MediaPlaybackCache.read(context) ?: it }
+    ).let { if (keepLastSong) MediaPlaybackCache.read(context) ?: it else it }
 
-    return controller.toSnapshot(context).also { snapshot ->
+    return controller.toSnapshot(context, keepLastSong).also { snapshot ->
       if (!snapshot.isFromCache) MediaPlaybackCache.save(context, snapshot)
     }
   }
 
   fun dispatch(context: Context, action: MediaControlAction): Boolean {
-    val controls = activeController(context)?.transportControls ?: return false
+    val controller = activeController(context) ?: return false
+    val controls = controller.transportControls
     return runCatching {
       when (action) {
         MediaControlAction.TogglePlayPause -> {
-          val snapshot = readSnapshot(context)
-          if (snapshot.isPlaying) controls.pause() else controls.play()
+          if (controller.playbackState?.state.isActivelyPlaying()) controls.pause() else controls.play()
         }
         MediaControlAction.Next -> controls.skipToNext()
         MediaControlAction.Previous -> controls.skipToPrevious()
       }
     }.isSuccess
+  }
+
+  fun sessionActivity(context: Context): PendingIntent? {
+    if (!NotificationListenerAccess.isGranted(context)) return null
+    return activeController(context)?.sessionActivity
   }
 
   private fun activeController(context: Context): MediaController? {
@@ -80,7 +90,10 @@ object MediaSessionReader {
     )
   }
 
-  private fun MediaController.toSnapshot(context: Context): MediaPlaybackSnapshot {
+  private fun MediaController.toSnapshot(
+    context: Context,
+    keepLastSong: Boolean,
+  ): MediaPlaybackSnapshot {
     val state = playbackState
     val metadata = metadata
     val title = metadata.firstText(
@@ -94,7 +107,7 @@ object MediaSessionReader {
       MediaMetadata.METADATA_KEY_ALBUM,
     )
     val actions = state?.actions ?: 0L
-    val cached = MediaPlaybackCache.read(context)
+    val cached = if (keepLastSong) MediaPlaybackCache.read(context) else null
     if (title.isBlank() || artist.isBlank()) {
       return cached?.copy(
         isPlaying = state?.state.isActivelyPlaying(),
@@ -128,7 +141,11 @@ object MediaSessionReader {
       ),
       canSkipNext = actions.hasAny(PlaybackState.ACTION_SKIP_TO_NEXT),
       canSkipPrevious = actions.hasAny(PlaybackState.ACTION_SKIP_TO_PREVIOUS),
-      artwork = metadata.artwork()?.scaledForWidget(),
+      artwork = metadata.artwork()?.scaledForWidget() ?: cached?.artwork,
+      positionMs = state?.currentPositionMs() ?: 0L,
+      durationMs = metadata.durationMs(),
+      lastPositionUpdateTimeMs = state?.lastPositionUpdateTime ?: 0L,
+      playbackSpeed = state?.playbackSpeed ?: 0f,
     )
   }
 
@@ -138,6 +155,15 @@ object MediaSessionReader {
 
   private fun Long.hasAny(vararg expectedActions: Long): Boolean {
     return expectedActions.any { action -> this and action != 0L }
+  }
+
+  private fun PlaybackState.currentPositionMs(): Long {
+    val basePosition = position.coerceAtLeast(0L)
+    if (!state.isActivelyPlaying() || playbackSpeed <= 0f || lastPositionUpdateTime <= 0L) {
+      return basePosition
+    }
+    val elapsed = (SystemClock.elapsedRealtime() - lastPositionUpdateTime).coerceAtLeast(0L)
+    return (basePosition + elapsed * playbackSpeed).toLong().coerceAtLeast(0L)
   }
 
   private fun MediaMetadata?.firstText(vararg keys: String): String {
@@ -152,6 +178,11 @@ object MediaSessionReader {
     return getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
       ?: getBitmap(MediaMetadata.METADATA_KEY_ART)
       ?: getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+  }
+
+  private fun MediaMetadata?.durationMs(): Long {
+    if (this == null) return 0L
+    return getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0L)
   }
 
   private fun Bitmap.scaledForWidget(): Bitmap {

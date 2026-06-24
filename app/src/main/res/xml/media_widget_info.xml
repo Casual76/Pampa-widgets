@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
   android:description="@string/media_widget_description"
+  android:configure="com.pampa.widgets.widget.media.MediaWidgetConfigurationActivity"
   android:initialLayout="@layout/widget_media_controls"
-  android:minHeight="96dp"
-  android:minResizeHeight="82dp"
+  android:minHeight="170dp"
+  android:minResizeHeight="128dp"
   android:minResizeWidth="220dp"
   android:minWidth="250dp"
   android:previewLayout="@layout/widget_media_controls"
   android:resizeMode="horizontal|vertical"
   android:targetCellHeight="2"
-  android:targetCellWidth="4"
+  android:targetCellWidth="3"
   android:updatePeriodMillis="0"
   android:widgetCategory="home_screen" />

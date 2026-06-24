@@ -40,6 +40,32 @@ class PampaManifestParserTest {
   }
 
   @Test
+  fun parsesManifestWithBareNewlineInChangelog() {
+    val update = json.parsePampaStableUpdate(
+      """
+      {
+        "app": {
+          "repository": {
+            "repoOwner": "Casual76",
+            "repoName": "Pampa-widgets"
+          },
+          "stable": {
+            "version": "1.2.4",
+            "changelog": "Prima riga
+      seconda riga",
+            "releaseTag": "stable-pampa-widgets-v1.2.4",
+            "apkAsset": "pampa-widgets-1.2.4.apk"
+          }
+        }
+      }
+      """.trimIndent(),
+    )
+
+    assertEquals("1.2.4", update.version)
+    assertEquals("Prima riga\nseconda riga", update.changelog)
+  }
+
+  @Test
   fun parsesPampaStoreEntryForUpdaterFallback() {
     val entry = json.parsePampaStoreEntry(
       """

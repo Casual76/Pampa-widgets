@@ -13,124 +13,160 @@
     android:scaleType="fitXY"
     android:src="@drawable/bg_media_widget" />
 
+  <ImageView
+    android:id="@+id/media_widget_feedback_overlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:contentDescription="@null"
+    android:scaleType="fitXY"
+    android:visibility="gone" />
+
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:baselineAligned="false"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:padding="16dp">
-
-    <FrameLayout
-      android:layout_width="88dp"
-      android:layout_height="88dp"
-      android:background="@drawable/bg_media_artwork">
-
-      <ImageView
-        android:id="@+id/media_widget_artwork"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="@null"
-        android:scaleType="centerCrop"
-        android:src="@drawable/ic_widget_music_note" />
-    </FrameLayout>
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingStart="17dp"
+    android:paddingTop="15dp"
+    android:paddingEnd="17dp"
+    android:paddingBottom="14dp">
 
     <LinearLayout
-      android:layout_width="0dp"
-      android:layout_height="match_parent"
-      android:layout_marginStart="16dp"
+      android:id="@+id/media_widget_track_row"
+      android:layout_width="match_parent"
+      android:layout_height="0dp"
       android:layout_weight="1"
-      android:gravity="center_vertical|start"
-      android:orientation="vertical">
+      android:baselineAligned="false"
+      android:gravity="center_vertical"
+      android:orientation="horizontal">
 
-      <TextView
-        android:id="@+id/media_widget_source"
-        android:layout_width="wrap_content"
-        android:layout_height="24dp"
-        android:background="@drawable/bg_media_source_pill"
-        android:ellipsize="end"
-        android:gravity="center"
-        android:maxLines="1"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:text="Spotify"
-        android:textColor="@color/widget_on_surface"
-        android:textSize="11sp"
-        android:textStyle="bold" />
+      <FrameLayout
+        android:id="@+id/media_widget_artwork_frame"
+        android:layout_width="98dp"
+        android:layout_height="98dp"
+        android:background="@drawable/bg_media_artwork">
 
-      <TextView
-        android:id="@+id/media_widget_title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
-        android:ellipsize="end"
-        android:includeFontPadding="false"
-        android:maxLines="1"
-        android:text="Nessuna riproduzione"
-        android:textColor="@color/widget_on_surface"
-        android:textSize="16sp"
-        android:textStyle="bold" />
-
-      <TextView
-        android:id="@+id/media_widget_artist"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:ellipsize="end"
-        android:includeFontPadding="false"
-        android:maxLines="1"
-        android:text="Apri Spotify o YouTube Music"
-        android:textColor="@color/widget_on_surface_variant"
-        android:textSize="13sp" />
-
-      <TextView
-        android:id="@+id/media_widget_permission"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:text="Tocca play per abilitare"
-        android:textColor="@color/widget_accent"
-        android:textSize="11sp"
-        android:visibility="gone" />
+        <ImageView
+          android:id="@+id/media_widget_artwork"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:contentDescription="@null"
+          android:scaleType="centerCrop"
+          android:src="@drawable/ic_widget_music_note" />
+      </FrameLayout>
 
       <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="50dp"
-        android:layout_marginTop="7dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:id="@+id/media_widget_text_stack"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical|start"
+        android:orientation="vertical">
 
-        <ImageButton
-          android:id="@+id/media_widget_previous"
-          android:layout_width="40dp"
-          android:layout_height="40dp"
-          android:background="@drawable/bg_media_control"
-          android:contentDescription="Traccia precedente"
-          android:padding="10dp"
-          android:src="@drawable/ic_widget_previous" />
+        <TextView
+          android:id="@+id/media_widget_source"
+          android:layout_width="wrap_content"
+          android:layout_height="20dp"
+          android:background="@drawable/bg_media_source_pill"
+          android:ellipsize="end"
+          android:gravity="center"
+          android:maxLines="1"
+          android:paddingStart="9dp"
+          android:paddingEnd="9dp"
+          android:text="Spotify"
+          android:textColor="@color/widget_on_surface"
+          android:textSize="10sp"
+          android:textStyle="bold" />
 
-        <ImageButton
-          android:id="@+id/media_widget_play_pause"
-          android:layout_width="52dp"
-          android:layout_height="52dp"
-          android:layout_marginStart="12dp"
-          android:background="@drawable/bg_media_control_primary"
-          android:contentDescription="Play pausa"
-          android:padding="12dp"
-          android:src="@drawable/ic_widget_play" />
+        <TextView
+          android:id="@+id/media_widget_title"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="7dp"
+          android:ellipsize="end"
+          android:includeFontPadding="false"
+          android:maxLines="2"
+          android:text="Nessuna riproduzione"
+          android:textColor="@color/widget_on_surface"
+          android:textSize="16sp"
+          android:textStyle="bold" />
 
-        <ImageButton
-          android:id="@+id/media_widget_next"
-          android:layout_width="40dp"
-          android:layout_height="40dp"
-          android:layout_marginStart="12dp"
-          android:background="@drawable/bg_media_control"
-          android:contentDescription="Traccia successiva"
-          android:padding="10dp"
-          android:src="@drawable/ic_widget_next" />
+        <TextView
+          android:id="@+id/media_widget_artist"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="3dp"
+          android:ellipsize="end"
+          android:includeFontPadding="false"
+          android:maxLines="1"
+          android:text="Apri Spotify o YouTube Music"
+          android:textColor="@color/widget_on_surface_variant"
+          android:textSize="13sp" />
+
+        <TextView
+          android:id="@+id/media_widget_permission"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="4dp"
+          android:ellipsize="end"
+          android:maxLines="1"
+          android:text="Tocca play per abilitare"
+          android:textColor="@color/widget_accent"
+          android:textSize="11sp"
+          android:visibility="gone" />
       </LinearLayout>
+    </LinearLayout>
+
+    <ProgressBar
+      android:id="@+id/media_widget_progress"
+      style="?android:attr/progressBarStyleHorizontal"
+      android:layout_width="match_parent"
+      android:layout_height="4dp"
+      android:layout_marginTop="7dp"
+      android:layout_marginBottom="9dp"
+      android:indeterminate="false"
+      android:max="1000"
+      android:progress="0"
+      android:progressDrawable="@drawable/bg_media_progress"
+      android:visibility="invisible" />
+
+    <LinearLayout
+      android:id="@+id/media_widget_controls"
+      android:layout_width="match_parent"
+      android:layout_height="54dp"
+      android:gravity="center"
+      android:orientation="horizontal">
+
+      <ImageButton
+        android:id="@+id/media_widget_previous"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_media_control"
+        android:contentDescription="Traccia precedente"
+        android:padding="10dp"
+        android:src="@drawable/ic_widget_previous" />
+
+      <ImageButton
+        android:id="@+id/media_widget_play_pause"
+        android:layout_width="54dp"
+        android:layout_height="54dp"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="14dp"
+        android:background="@drawable/bg_media_control_primary"
+        android:contentDescription="Play pausa"
+        android:padding="12dp"
+        android:src="@drawable/ic_widget_play" />
+
+      <ImageButton
+        android:id="@+id/media_widget_next"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_media_control"
+        android:contentDescription="Traccia successiva"
+        android:padding="10dp"
+        android:src="@drawable/ic_widget_next" />
     </LinearLayout>
   </LinearLayout>
 </FrameLayout>

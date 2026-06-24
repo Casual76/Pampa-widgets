@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -126,7 +128,7 @@ class HttpPampaUpdateRemoteDataSource @Inject constructor(
 }
 
 internal fun Json.parsePampaStableUpdate(rawManifest: String): AvailableAppUpdate {
-  val manifest = decodeFromString<PampaAppManifest>(rawManifest)
+  val manifest = decodeFromString<PampaAppManifest>(rawManifest.escapeBareControlCharactersInJsonStrings())
   val app = manifest.app
   val stable = app.stable ?: error("Nessuna release stable disponibile.")
   val repository = app.repository
@@ -146,9 +148,45 @@ internal fun Json.parsePampaStableUpdate(rawManifest: String): AvailableAppUpdat
 }
 
 internal fun Json.parsePampaStoreEntry(rawManifest: String): PampaStoreEntry {
-  val manifest = decodeFromString<PampaStoreManifest>(rawManifest)
+  val manifest = decodeFromString<PampaStoreManifest>(rawManifest.escapeBareControlCharactersInJsonStrings())
   return manifest.apps.firstOrNull { it.id == PampaWidgetsAppId }
     ?: error("Pampa Widgets non e' presente nell'indice Pampa Store.")
+}
+
+private fun String.escapeBareControlCharactersInJsonStrings(): String {
+  val output = StringBuilder(length)
+  var inString = false
+  var escaping = false
+
+  forEach { char ->
+    if (!inString) {
+      output.append(char)
+      if (char == '"') inString = true
+      return@forEach
+    }
+
+    when {
+      escaping -> {
+        output.append(char)
+        escaping = false
+      }
+      char == '\\' -> {
+        output.append(char)
+        escaping = true
+      }
+      char == '"' -> {
+        output.append(char)
+        inString = false
+      }
+      char == '\n' -> output.append("\\n")
+      char == '\r' -> output.append("\\n")
+      char == '\t' -> output.append("\\t")
+      char.code < 0x20 -> output.append(' ')
+      else -> output.append(char)
+    }
+  }
+
+  return output.toString()
 }
 
 interface AppUpdateInstaller {
@@ -206,7 +244,13 @@ class AndroidAppUpdateInstaller @Inject constructor(
     runCatching {
       commitPackageInstallerSession(apkFile, packageInfo) { state -> send(state) }
     }.onFailure { error ->
-      send(AppUpdateInstallState.Error(error.message ?: "Installazione aggiornamento non riuscita."))
+      runCatching {
+        launchSystemInstaller(apkFile)
+      }.onSuccess {
+        send(AppUpdateInstallState.AwaitingUserAction("Conferma l'installazione sul dispositivo."))
+      }.onFailure {
+        send(AppUpdateInstallState.Error(error.message ?: "Installazione aggiornamento non riuscita."))
+      }
     }
   }
 
@@ -305,7 +349,7 @@ class AndroidAppUpdateInstaller @Inject constructor(
     val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
       setAppPackageName(packageInfo.packageName)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
       }
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         setPackageSource(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE)
@@ -351,12 +395,17 @@ class AndroidAppUpdateInstaller @Inject constructor(
     }
 
     var terminalEvent: AppUpdateInstallState? = null
-    events.takeWhile { event ->
-      val keepCollecting = event !is AppUpdateInstallState.Installed &&
-        event !is AppUpdateInstallState.Error
-      if (!keepCollecting) terminalEvent = event
-      keepCollecting
-    }.collect { emitState(it) }
+    var promptedForUserAction = false
+    val finished = withTimeoutOrNull(15_000) {
+      events.takeWhile { event ->
+        if (event is AppUpdateInstallState.AwaitingUserAction) promptedForUserAction = true
+        val keepCollecting = event !is AppUpdateInstallState.Installed &&
+          event !is AppUpdateInstallState.Error
+        if (!keepCollecting) terminalEvent = event
+        keepCollecting
+      }.collect { emitState(it) }
+      true
+    } ?: false
 
     terminalEvent?.let { event ->
       emitState(
@@ -366,7 +415,26 @@ class AndroidAppUpdateInstaller @Inject constructor(
           event
         },
       )
+    } ?: run {
+      if (!finished && !promptedForUserAction) {
+        launchSystemInstaller(file)
+        emitState(AppUpdateInstallState.AwaitingUserAction("Conferma l'installazione sul dispositivo."))
+      }
     }
+  }
+
+  private fun launchSystemInstaller(file: File) {
+    val uri = FileProvider.getUriForFile(
+      context,
+      "${context.packageName}.updateprovider",
+      file,
+    )
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+      setDataAndType(uri, "application/vnd.android.package-archive")
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(intent)
   }
 }
 

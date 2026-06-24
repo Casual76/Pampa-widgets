@@ -24,9 +24,27 @@
       </intent-filter>
     </activity>
 
+    <activity
+      android:name=".widget.media.MediaWidgetConfigurationActivity"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+      </intent-filter>
+    </activity>
+
     <receiver
       android:name=".core.update.AppUpdateInstallResultReceiver"
       android:exported="false" />
+
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.updateprovider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/update_file_paths" />
+    </provider>
 
     <receiver
       android:name=".widget.media.MediaWidgetProvider"

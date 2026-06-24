@@ -11,6 +11,8 @@ object MediaPlaybackCache {
   private const val KeyArtist = "artist"
   private const val KeySource = "source"
   private const val KeyPackageName = "package_name"
+  private const val KeyPositionMs = "position_ms"
+  private const val KeyDurationMs = "duration_ms"
   private const val KeyUpdatedAt = "updated_at"
   private const val MaxCacheAgeMillis = 6 * 60 * 60 * 1000L
 
@@ -22,6 +24,8 @@ object MediaPlaybackCache {
       .putString(KeyArtist, snapshot.artist)
       .putString(KeySource, snapshot.sourceLabel)
       .putString(KeyPackageName, snapshot.packageName)
+      .putLong(KeyPositionMs, snapshot.positionMs)
+      .putLong(KeyDurationMs, snapshot.durationMs)
       .putLong(KeyUpdatedAt, System.currentTimeMillis())
       .apply()
 
@@ -51,6 +55,8 @@ object MediaPlaybackCache {
       canSkipNext = true,
       canSkipPrevious = true,
       artwork = readArtwork(context),
+      positionMs = preferences.getLong(KeyPositionMs, 0L),
+      durationMs = preferences.getLong(KeyDurationMs, 0L),
       isFromCache = true,
     )
   }
