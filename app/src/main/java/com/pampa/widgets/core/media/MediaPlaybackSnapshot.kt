@@ -25,4 +25,5 @@ data class MediaPlaybackSnapshot(
   val canSkipNext: Boolean = false,
   val canSkipPrevious: Boolean = false,
   val artwork: Bitmap? = null,
+  val isFromCache: Boolean = false,
 )

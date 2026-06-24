@@ -11,6 +11,7 @@ class MediaSessionSelectorTest {
       packageName = MediaPackages.Spotify,
       isPlaying = true,
       hasMetadata = true,
+      hasSongIdentity = true,
       supportsTransportControls = true,
       lastPositionUpdateTime = 10L,
     )
@@ -23,21 +24,43 @@ class MediaSessionSelectorTest {
   }
 
   @Test
-  fun playingSessionWinsOverPausedSpotify() {
+  fun unsupportedGenericSessionDoesNotBeatSpotify() {
     val pausedSpotify = MediaSessionCandidate(
       packageName = MediaPackages.Spotify,
       isPlaying = false,
       hasMetadata = true,
+      hasSongIdentity = true,
       supportsTransportControls = true,
     )
     val playingGeneric = MediaSessionCandidate(
       packageName = "com.example.player",
       isPlaying = true,
       hasMetadata = true,
+      hasSongIdentity = true,
       supportsTransportControls = true,
     )
 
-    assertEquals(playingGeneric, chooseBestMediaSession(listOf(pausedSpotify, playingGeneric)))
+    assertEquals(pausedSpotify, chooseBestMediaSession(listOf(pausedSpotify, playingGeneric)))
+  }
+
+  @Test
+  fun playingMusicAppWinsOverPausedSpotify() {
+    val pausedSpotify = MediaSessionCandidate(
+      packageName = MediaPackages.Spotify,
+      isPlaying = false,
+      hasMetadata = true,
+      hasSongIdentity = true,
+      supportsTransportControls = true,
+    )
+    val appleMusic = MediaSessionCandidate(
+      packageName = MediaPackages.AppleMusic,
+      isPlaying = true,
+      hasMetadata = true,
+      hasSongIdentity = true,
+      supportsTransportControls = true,
+    )
+
+    assertEquals(appleMusic, chooseBestMediaSession(listOf(pausedSpotify, appleMusic)))
   }
 
   @Test
@@ -46,9 +69,23 @@ class MediaSessionSelectorTest {
       packageName = MediaPackages.Spotify,
       isPlaying = true,
       hasMetadata = true,
+      hasSongIdentity = true,
       supportsTransportControls = false,
     )
 
     assertNull(chooseBestMediaSession(listOf(unavailable)))
+  }
+
+  @Test
+  fun ignoresNonMusicPackagesEvenWhenPlaying() {
+    val youtubeVideo = MediaSessionCandidate(
+      packageName = "com.google.android.youtube",
+      isPlaying = true,
+      hasMetadata = true,
+      hasSongIdentity = true,
+      supportsTransportControls = true,
+    )
+
+    assertNull(chooseBestMediaSession(listOf(youtubeVideo)))
   }
 }

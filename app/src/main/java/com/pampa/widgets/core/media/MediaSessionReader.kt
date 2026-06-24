@@ -23,11 +23,13 @@ object MediaSessionReader {
     val controller = activeController(context) ?: return MediaPlaybackSnapshot(
       availability = MediaPlaybackAvailability.NoSession,
       title = "Nessuna riproduzione",
-      artist = "Apri Spotify o YouTube Music e premi play.",
+      artist = "Apri Spotify, Apple Music o YouTube Music.",
       sourceLabel = "In attesa",
-    )
+    ).let { MediaPlaybackCache.read(context) ?: it }
 
-    return controller.toSnapshot(context)
+    return controller.toSnapshot(context).also { snapshot ->
+      if (!snapshot.isFromCache) MediaPlaybackCache.save(context, snapshot)
+    }
   }
 
   fun dispatch(context: Context, action: MediaControlAction): Boolean {
@@ -58,10 +60,21 @@ object MediaSessionReader {
 
   private fun MediaController.toCandidate(): MediaSessionCandidate {
     val state = playbackState
+    val metadata = metadata
+    val title = metadata.firstText(
+      MediaMetadata.METADATA_KEY_DISPLAY_TITLE,
+      MediaMetadata.METADATA_KEY_TITLE,
+    )
+    val artist = metadata.firstText(
+      MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE,
+      MediaMetadata.METADATA_KEY_ARTIST,
+      MediaMetadata.METADATA_KEY_ALBUM_ARTIST,
+    )
     return MediaSessionCandidate(
       packageName = packageName,
       isPlaying = state?.state.isActivelyPlaying(),
       hasMetadata = metadata != null,
+      hasSongIdentity = title.isNotBlank() && artist.isNotBlank(),
       supportsTransportControls = (state?.actions ?: 0L) != 0L,
       lastPositionUpdateTime = state?.lastPositionUpdateTime ?: 0L,
     )
@@ -73,14 +86,34 @@ object MediaSessionReader {
     val title = metadata.firstText(
       MediaMetadata.METADATA_KEY_DISPLAY_TITLE,
       MediaMetadata.METADATA_KEY_TITLE,
-    ).ifBlank { appLabel(context, packageName) }
+    )
     val artist = metadata.firstText(
       MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE,
       MediaMetadata.METADATA_KEY_ARTIST,
       MediaMetadata.METADATA_KEY_ALBUM_ARTIST,
       MediaMetadata.METADATA_KEY_ALBUM,
-    ).ifBlank { "Sorgente multimediale attiva" }
+    )
     val actions = state?.actions ?: 0L
+    val cached = MediaPlaybackCache.read(context)
+    if (title.isBlank() || artist.isBlank()) {
+      return cached?.copy(
+        isPlaying = state?.state.isActivelyPlaying(),
+        canPlayPause = actions.hasAny(
+          PlaybackState.ACTION_PLAY,
+          PlaybackState.ACTION_PAUSE,
+          PlaybackState.ACTION_PLAY_PAUSE,
+        ),
+        canSkipNext = actions.hasAny(PlaybackState.ACTION_SKIP_TO_NEXT),
+        canSkipPrevious = actions.hasAny(PlaybackState.ACTION_SKIP_TO_PREVIOUS),
+        isFromCache = true,
+      ) ?: MediaPlaybackSnapshot(
+        availability = MediaPlaybackAvailability.NoSession,
+        title = "Nessuna traccia visibile",
+        artist = "Avvia una canzone da un'app musicale.",
+        sourceLabel = appLabel(context, packageName),
+      )
+    }
+
     return MediaPlaybackSnapshot(
       availability = MediaPlaybackAvailability.Active,
       title = title,
@@ -140,6 +173,13 @@ object MediaSessionReader {
       when (packageName) {
         MediaPackages.Spotify -> "Spotify"
         MediaPackages.YouTubeMusic -> "YouTube Music"
+        MediaPackages.AppleMusic -> "Apple Music"
+        MediaPackages.SamsungMusic -> "Samsung Music"
+        MediaPackages.AmazonMusic -> "Amazon Music"
+        MediaPackages.Deezer -> "Deezer"
+        MediaPackages.Tidal -> "Tidal"
+        MediaPackages.SoundCloud -> "SoundCloud"
+        MediaPackages.VLC -> "VLC"
         else -> "Media"
       }
     }

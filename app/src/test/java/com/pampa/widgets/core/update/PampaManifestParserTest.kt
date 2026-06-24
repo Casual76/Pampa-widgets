@@ -38,4 +38,33 @@ class PampaManifestParserTest {
       update.downloadUrl,
     )
   }
+
+  @Test
+  fun parsesPampaStoreEntryForUpdaterFallback() {
+    val entry = json.parsePampaStoreEntry(
+      """
+      {
+        "apps": [
+          {
+            "id": "other-app",
+            "repoOwner": "Casual76",
+            "repoName": "Other",
+            "manifestPath": "manifest.json"
+          },
+          {
+            "id": "pampa-widgets",
+            "repoOwner": "Casual76",
+            "repoName": "Pampa-widgets",
+            "manifestPath": "manifest.json",
+            "ref": ""
+          }
+        ]
+      }
+      """.trimIndent(),
+    )
+
+    assertEquals("Casual76", entry.repoOwner)
+    assertEquals("Pampa-widgets", entry.repoName)
+    assertEquals("manifest.json", entry.manifestPath)
+  }
 }

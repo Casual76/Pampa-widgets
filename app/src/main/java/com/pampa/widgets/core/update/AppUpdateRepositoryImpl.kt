@@ -38,8 +38,10 @@ import kotlinx.serialization.json.Json
 
 private const val PampaWidgetsManifestUrl =
   "https://raw.githubusercontent.com/Casual76/Pampa-widgets/main/manifest.json"
-private const val GithubApiBaseUrl = "https://api.github.com"
-private const val UserAgent = "PampaWidgetsUpdater/0.1.0"
+private const val PampaStoreManifestUrl =
+  "https://raw.githubusercontent.com/Casual76/Pampa-store/main/manifest.json"
+private const val PampaWidgetsAppId = "pampa-widgets"
+private const val UserAgent = "PampaWidgetsUpdater/0.2.3"
 
 @Singleton
 class PampaAppUpdateRepository @Inject constructor(
@@ -72,16 +74,43 @@ class HttpPampaUpdateRemoteDataSource @Inject constructor(
   private val json: Json,
 ) : PampaUpdateRemoteDataSource {
   override suspend fun fetchStableUpdate(): AvailableAppUpdate {
-    return json.parsePampaStableUpdate(readText(PampaWidgetsManifestUrl))
+    val direct = runCatching {
+      json.parsePampaStableUpdate(readText(PampaWidgetsManifestUrl, cacheBust = true))
+    }
+    if (direct.isSuccess) return direct.getOrThrow()
+
+    val viaStore = runCatching {
+      val storeEntry = json.parsePampaStoreEntry(readText(PampaStoreManifestUrl, cacheBust = true))
+      val manifestUrl =
+        "https://raw.githubusercontent.com/${storeEntry.repoOwner}/${storeEntry.repoName}/main/${storeEntry.manifestPath}"
+      json.parsePampaStableUpdate(readText(manifestUrl, cacheBust = true))
+    }
+    if (viaStore.isSuccess) return viaStore.getOrThrow()
+
+    error(
+      "Controllo aggiornamenti non riuscito: ${
+        direct.exceptionOrNull()?.message ?: "manifest app non disponibile"
+      }; ${
+        viaStore.exceptionOrNull()?.message ?: "manifest Pampa Store non disponibile"
+      }",
+    )
   }
 
-  private suspend fun readText(url: String): String = withContext(Dispatchers.IO) {
-    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+  private suspend fun readText(url: String, cacheBust: Boolean = false): String = withContext(Dispatchers.IO) {
+    val requestUrl = if (cacheBust) {
+      val separator = if ("?" in url) "&" else "?"
+      "$url${separator}t=${System.currentTimeMillis()}"
+    } else {
+      url
+    }
+    val connection = (URL(requestUrl).openConnection() as HttpURLConnection).apply {
       connectTimeout = 15_000
       readTimeout = 25_000
       instanceFollowRedirects = true
       setRequestProperty("Accept", "application/json")
       setRequestProperty("User-Agent", UserAgent)
+      setRequestProperty("Cache-Control", "no-cache")
+      setRequestProperty("Pragma", "no-cache")
     }
 
     try {
@@ -114,6 +143,12 @@ internal fun Json.parsePampaStableUpdate(rawManifest: String): AvailableAppUpdat
     downloadUrl = downloadUrl,
     sizeBytes = stable.sizeBytes,
   )
+}
+
+internal fun Json.parsePampaStoreEntry(rawManifest: String): PampaStoreEntry {
+  val manifest = decodeFromString<PampaStoreManifest>(rawManifest)
+  return manifest.apps.firstOrNull { it.id == PampaWidgetsAppId }
+    ?: error("Pampa Widgets non e' presente nell'indice Pampa Store.")
 }
 
 interface AppUpdateInstaller {
@@ -448,6 +483,20 @@ private data class PampaVersion(
   val releaseTag: String,
   val apkAsset: String = "",
   val sizeBytes: Long = 0L,
+)
+
+@Serializable
+private data class PampaStoreManifest(
+  val apps: List<PampaStoreEntry> = emptyList(),
+)
+
+@Serializable
+internal data class PampaStoreEntry(
+  val id: String,
+  val repoOwner: String,
+  val repoName: String,
+  val manifestPath: String = "manifest.json",
+  val ref: String = "",
 )
 
 @Module
