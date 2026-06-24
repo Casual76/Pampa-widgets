@@ -28,7 +28,10 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -259,31 +262,113 @@ private fun WidgetPreview(settings: AppSettings) {
     MediaWidgetTheme.DarkGlass -> Color(0xFF202722)
     else -> MaterialTheme.colorScheme.tertiary
   }
+  val dark = settings.mediaWidgetTheme == MediaWidgetTheme.DarkGlass
+  val cardColor = if (dark) {
+    Color(0xE61B211E)
+  } else {
+    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+  }
+  val textColor = if (dark) Color.White else MaterialTheme.colorScheme.onSurface
+  val secondaryTextColor = if (dark) Color.White.copy(alpha = 0.78f) else MaterialTheme.colorScheme.onSurfaceVariant
   Surface(
     modifier = Modifier.fillMaxWidth(),
     shape = MaterialTheme.shapes.extraLarge,
-    color = MaterialTheme.colorScheme.surfaceContainer,
+    color = cardColor,
   ) {
-    Row(
+    Column(
       modifier = Modifier.padding(16.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(14.dp),
+      verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+      ) {
+        Box(
+          modifier = Modifier
+            .size(
+              when (settings.mediaWidgetArtworkSize) {
+                MediaWidgetArtworkSize.Compact -> 74.dp
+                MediaWidgetArtworkSize.Balanced -> 84.dp
+                MediaWidgetArtworkSize.Large -> 94.dp
+              },
+            )
+            .clip(MaterialTheme.shapes.large)
+            .background(accent.copy(alpha = 0.82f)),
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White)
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+          if (settings.mediaWidgetShowSource) {
+            Text("Spotify", style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.Bold)
+          }
+          Text(
+            "Titolo canzone",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          if (settings.mediaWidgetShowArtist) {
+            Text("Artista", color = secondaryTextColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+        }
+      }
+
       Box(
         modifier = Modifier
-          .size(82.dp)
-          .clip(MaterialTheme.shapes.large)
-          .background(accent.copy(alpha = 0.82f)),
-        contentAlignment = Alignment.Center,
+          .fillMaxWidth()
+          .height(4.dp)
+          .clip(MaterialTheme.shapes.extraSmall)
+          .background(if (dark) Color.White.copy(alpha = 0.16f) else Color.Black.copy(alpha = 0.10f)),
       ) {
-        Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White)
+        Box(
+          modifier = Modifier
+            .fillMaxWidth(0.62f)
+            .height(4.dp)
+            .clip(MaterialTheme.shapes.extraSmall)
+            .background(if (dark) Color.White.copy(alpha = 0.78f) else Color.Black.copy(alpha = 0.42f)),
+        )
       }
-      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Text("Spotify", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        Text("Titolo canzone", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("Artista", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        PreviewControlIcon(Icons.Rounded.SkipPrevious, textColor.copy(alpha = 0.88f), dark)
+        Spacer(Modifier.width(16.dp))
+        Box(
+          modifier = Modifier
+            .size(56.dp)
+            .clip(MaterialTheme.shapes.extraLarge)
+            .background(accent.copy(alpha = if (dark) 0.88f else 0.42f)),
+          contentAlignment = Alignment.Center,
+        ) {
+          Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = textColor, modifier = Modifier.size(32.dp))
+        }
+        Spacer(Modifier.width(16.dp))
+        PreviewControlIcon(Icons.Rounded.SkipNext, textColor.copy(alpha = 0.88f), dark)
       }
     }
+  }
+}
+
+@Composable
+private fun PreviewControlIcon(
+  imageVector: androidx.compose.ui.graphics.vector.ImageVector,
+  tint: Color,
+  dark: Boolean,
+) {
+  Box(
+    modifier = Modifier
+      .size(44.dp)
+      .clip(MaterialTheme.shapes.extraLarge)
+      .background(if (dark) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.40f)),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(imageVector, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
   }
 }
 

@@ -643,10 +643,16 @@ private fun extractPalette(artwork: Bitmap?): CoverPalette {
   var bSum = 0L
   var count = 0L
 
-  var bestSat = -1f
+  var accentRSum = 0.0
+  var accentGSum = 0.0
+  var accentBSum = 0.0
+  var accentWeightSum = 0.0
+
+  var bestScore = -1f
   var bestR = 0
   var bestG = 0
   var bestB = 0
+  var bestSat = 0f
   var bestBrightness = 0f
 
   var y = 0
@@ -663,12 +669,20 @@ private fun extractPalette(artwork: Bitmap?): CoverPalette {
       val minC = min(r, min(g, b))
       val brightness = maxC / 255f
       val sat = if (maxC == 0) 0f else (maxC - minC) / maxC.toFloat()
-      // Bias toward saturated + reasonably bright pixels.
-      val score = sat * (0.35f + 0.65f * brightness)
-      if (score > bestSat) {
-        bestSat = score
+      val balance = 1f - (abs(brightness - 0.62f) / 0.62f).coerceIn(0f, 1f)
+      val score = sat * (0.45f + 0.55f * brightness) * (0.65f + 0.35f * balance)
+      if (score > bestScore) {
+        bestScore = score
         bestR = r; bestG = g; bestB = b
+        bestSat = sat
         bestBrightness = brightness
+      }
+      if (sat >= 0.16f && brightness in 0.14f..0.94f) {
+        val weight = (sat * sat) * (0.50f + 0.50f * brightness) * (0.70f + 0.30f * balance)
+        accentRSum += r * weight
+        accentGSum += g * weight
+        accentBSum += b * weight
+        accentWeightSum += weight
       }
       x += 2
     }
@@ -681,11 +695,16 @@ private fun extractPalette(artwork: Bitmap?): CoverPalette {
     Color.rgb((rSum / count).toInt(), (gSum / count).toInt(), (bSum / count).toInt())
   }
 
-  // If the image is nearly grey, fall back to a tinted version of the dominant.
-  val vibrant = if (bestSat < 0.12f || bestBrightness < 0.08f) {
-    dominant.enrich(0.45f)
+  val vibrant = if (accentWeightSum >= 1.0) {
+    Color.rgb(
+      (accentRSum / accentWeightSum).toInt().coerceIn(0, 255),
+      (accentGSum / accentWeightSum).toInt().coerceIn(0, 255),
+      (accentBSum / accentWeightSum).toInt().coerceIn(0, 255),
+    ).enrich(0.16f)
+  } else if (bestSat >= 0.14f && bestBrightness >= 0.12f) {
+    Color.rgb(bestR, bestG, bestB).enrich(0.12f)
   } else {
-    Color.rgb(bestR, bestG, bestB)
+    dominant.enrich(0.45f)
   }
   return CoverPalette(dominant = dominant, vibrant = vibrant)
 }
