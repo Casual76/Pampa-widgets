@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "releaseDate": "2026-06-24",
-      "changelog": "Widget Media Controls allineato alla direzione Samsung blur: sfondo basato sul wallpaper sfocato con opacita del widget, tinta piatta dal colore principale della cover, cover usata solo nel riquadro e rimozione dei vecchi residui di animazione/overlay che potevano riportare gradienti o blur dalla copertina.",
-      "releaseTag": "stable-pampa-widgets-v0.2.5",
-      "apkAsset": "pampa-widgets-0.2.5.apk",
+      "changelog": "Widget Media Controls rifinito: scelta colore album piu stabile con media pesata dei colori reali della cover, preview impostazioni piu fedele al widget con progress e controlli, e mantenimento del look Samsung blur con cover solo nel riquadro.",
+      "releaseTag": "stable-pampa-widgets-v0.2.6",
+      "apkAsset": "pampa-widgets-0.2.6.apk",
       "exeAsset": "",
-      "sizeBytes": 52356165
+      "sizeBytes": 52372557
     },
     "beta": {
-      "version": "0.2.5",
+      "version": "0.2.6",
       "releaseDate": "2026-06-24",
-      "changelog": "Widget Media Controls allineato alla direzione Samsung blur: sfondo basato sul wallpaper sfocato con opacita del widget, tinta piatta dal colore principale della cover, cover usata solo nel riquadro e rimozione dei vecchi residui di animazione/overlay che potevano riportare gradienti o blur dalla copertina.",
-      "releaseTag": "stable-pampa-widgets-v0.2.5",
-      "apkAsset": "pampa-widgets-0.2.5.apk",
+      "changelog": "Widget Media Controls rifinito: scelta colore album piu stabile con media pesata dei colori reali della cover, preview impostazioni piu fedele al widget con progress e controlli, e mantenimento del look Samsung blur con cover solo nel riquadro.",
+      "releaseTag": "stable-pampa-widgets-v0.2.6",
+      "apkAsset": "pampa-widgets-0.2.6.apk",
       "exeAsset": "",
-      "sizeBytes": 52356165
+      "sizeBytes": 52372557
     },
     "history": [
+      {
+        "version": "0.2.5",
+        "releaseDate": "2026-06-24",
+        "changelog": "Widget Media Controls allineato alla direzione Samsung blur: sfondo basato sul wallpaper sfocato con opacita del widget, tinta piatta dal colore principale della cover, cover usata solo nel riquadro e rimozione dei vecchi residui di animazione/overlay che potevano riportare gradienti o blur dalla copertina.",
+        "releaseTag": "stable-pampa-widgets-v0.2.5",
+        "apkAsset": "pampa-widgets-0.2.5.apk",
+        "exeAsset": "",
+        "sizeBytes": 52356165
+      },
       {
         "version": "0.2.4",
         "releaseDate": "2026-06-24",
