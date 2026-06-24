@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.2",
+      "version": "0.2.3",
       "releaseDate": "2026-06-24",
-      "changelog": "Restyling completo del widget Media Controls: superficie chiara semitrasparente in stile sistema, controlli piu morbidi, source chip leggero, artwork piu pulito e layout meno invasivo sulla home.",
-      "releaseTag": "stable-pampa-widgets-v0.2.2",
-      "apkAsset": "pampa-widgets-0.2.2.apk",
+      "changelog": "Fix updater in-app con fallback all'indice Pampa Store. Widget Media Controls rivisto: solo app musicali supportate, cache dell'ultima canzone, background dinamico dalla cover, cover arrotondata e controlli piu vicini a Spotify/sistema.",
+      "releaseTag": "stable-pampa-widgets-v0.2.3",
+      "apkAsset": "pampa-widgets-0.2.3.apk",
       "exeAsset": "",
-      "sizeBytes": 52216672
+      "sizeBytes": 52233056
     },
     "beta": {
-      "version": "0.2.2",
+      "version": "0.2.3",
       "releaseDate": "2026-06-24",
-      "changelog": "Restyling completo del widget Media Controls: superficie chiara semitrasparente in stile sistema, controlli piu morbidi, source chip leggero, artwork piu pulito e layout meno invasivo sulla home.",
-      "releaseTag": "stable-pampa-widgets-v0.2.2",
-      "apkAsset": "pampa-widgets-0.2.2.apk",
+      "changelog": "Fix updater in-app con fallback all'indice Pampa Store. Widget Media Controls rivisto: solo app musicali supportate, cache dell'ultima canzone, background dinamico dalla cover, cover arrotondata e controlli piu vicini a Spotify/sistema.",
+      "releaseTag": "stable-pampa-widgets-v0.2.3",
+      "apkAsset": "pampa-widgets-0.2.3.apk",
       "exeAsset": "",
-      "sizeBytes": 52216672
+      "sizeBytes": 52233056
     },
     "history": [
+      {
+        "version": "0.2.2",
+        "releaseDate": "2026-06-24",
+        "changelog": "Restyling completo del widget Media Controls: superficie chiara semitrasparente in stile sistema, controlli piu morbidi, source chip leggero, artwork piu pulito e layout meno invasivo sulla home.",
+        "releaseTag": "stable-pampa-widgets-v0.2.2",
+        "apkAsset": "pampa-widgets-0.2.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 52216672
+      },
       {
         "version": "0.2.1",
         "releaseDate": "2026-06-23",
