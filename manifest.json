@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.3",
+      "version": "0.2.4",
       "releaseDate": "2026-06-24",
-      "changelog": "Fix updater in-app con fallback all'indice Pampa Store. Widget Media Controls rivisto: solo app musicali supportate, cache dell'ultima canzone, background dinamico dalla cover, cover arrotondata e controlli piu vicini a Spotify/sistema.",
-      "releaseTag": "stable-pampa-widgets-v0.2.3",
-      "apkAsset": "pampa-widgets-0.2.3.apk",
+      "changelog": "Widget Media Controls ripulito: sfondo Samsung blur dal wallpaper con tinta album piatta, cover solo nel riquadro, tap sul widget che apre Spotify o l app musicale attiva, impostazioni spostate nella configurazione del widget e updater in-app piu tollerante ai manifest e all installer Android.",
+      "releaseTag": "stable-pampa-widgets-v0.2.4",
+      "apkAsset": "pampa-widgets-0.2.4.apk",
       "exeAsset": "",
-      "sizeBytes": 52233056
+      "sizeBytes": 52356238
     },
     "beta": {
-      "version": "0.2.3",
+      "version": "0.2.4",
       "releaseDate": "2026-06-24",
-      "changelog": "Fix updater in-app con fallback all'indice Pampa Store. Widget Media Controls rivisto: solo app musicali supportate, cache dell'ultima canzone, background dinamico dalla cover, cover arrotondata e controlli piu vicini a Spotify/sistema.",
-      "releaseTag": "stable-pampa-widgets-v0.2.3",
-      "apkAsset": "pampa-widgets-0.2.3.apk",
+      "changelog": "Widget Media Controls ripulito: sfondo Samsung blur dal wallpaper con tinta album piatta, cover solo nel riquadro, tap sul widget che apre Spotify o l app musicale attiva, impostazioni spostate nella configurazione del widget e updater in-app piu tollerante ai manifest e all installer Android.",
+      "releaseTag": "stable-pampa-widgets-v0.2.4",
+      "apkAsset": "pampa-widgets-0.2.4.apk",
       "exeAsset": "",
-      "sizeBytes": 52233056
+      "sizeBytes": 52356238
     },
     "history": [
+      {
+        "version": "0.2.3",
+        "releaseDate": "2026-06-24",
+        "changelog": "Fix updater in-app con fallback all'indice Pampa Store. Widget Media Controls rivisto: solo app musicali supportate, cache dell'ultima canzone, background dinamico dalla cover, cover arrotondata e controlli piu vicini a Spotify/sistema.",
+        "releaseTag": "stable-pampa-widgets-v0.2.3",
+        "apkAsset": "pampa-widgets-0.2.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 52233056
+      },
       {
         "version": "0.2.2",
         "releaseDate": "2026-06-24",
