@@ -11,7 +11,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
@@ -39,7 +38,6 @@ import com.pampa.widgets.core.settings.MediaWidgetTheme
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 import kotlin.math.sin
 
 /** Background render size (px) and corner radius for the widget card. */
@@ -252,7 +250,6 @@ object MediaWidgetUpdater {
     applyArtwork(context, views, snapshot, settings)
     applyControls(context, views, snapshot, style, settings, feedbackAction, animProgress)
     applyProgress(views, snapshot, style)
-    views.setViewVisibility(R.id.media_widget_feedback_overlay, View.GONE)
 
     val playIntent = if (snapshot.availability == MediaPlaybackAvailability.PermissionRequired) {
       settingsPendingIntent(context)
@@ -377,127 +374,6 @@ object MediaWidgetUpdater {
     views.setFloat(R.id.media_widget_play_pause, "setAlpha", if (snapshot.canPlayPause) 1f else 0.55f)
   }
 
-  /**
-   * Smooth play/pause morph: a gentle scale dip with soft elastic ease, crossfading
-   * source → target glyph at the midpoint so it reads as a transformation.
-   */
-  private fun drawPlayPauseMorph(
-    context: Context,
-    style: MediaWidgetStyle,
-    progress: Float,
-    targetPlaying: Boolean,
-  ): Bitmap {
-    val t = easeInOutSine(progress)
-    val canvasPx = context.dp(54)
-    val iconPx = context.dp(28)
-    val bitmap = Bitmap.createBitmap(canvasPx, canvasPx, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val center = canvasPx / 2f
-
-    // Scale: shrinks to 0.70 at midpoint with elastic settle. Feels like a soft press-and-spring.
-    val scale = 1f - 0.30f * sin((Math.PI * progress).toFloat()).let {
-      // Slight elastic: overshoot slightly on the way back (faster settle = snappier)
-      if (progress > 0.5f) it * (1f + 0.08f * (1f - (progress - 0.5f) * 2f)) else it
-    }
-
-    // Crossfade: asymmetric — quick fade-out source, slightly delayed fade-in target.
-    val sourceWeight = (1f - smoothstep(0.20f, 0.55f, progress)).coerceIn(0f, 1f)
-    val targetWeight = smoothstep(0.40f, 0.75f, progress).coerceIn(0f, 1f)
-
-    val sourceId = if (targetPlaying) R.drawable.ic_widget_play else R.drawable.ic_widget_pause
-    val targetId = if (targetPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
-
-    if (sourceWeight > 0.01f) {
-      drawGlyphOnCanvas(
-        context, canvas, sourceId, center, iconPx, style.playIconColor,
-        scale = scale, alpha = sourceWeight,
-      )
-    }
-    if (targetWeight > 0.01f) {
-      drawGlyphOnCanvas(
-        context, canvas, targetId, center, iconPx, style.playIconColor,
-        scale = scale, alpha = targetWeight,
-      )
-    }
-    return bitmap
-  }
-
-  /**
-   * Premium skip animation: two filled chevrons that cascade in the skip direction.
-   * The leading chevron accelerates ahead and fades, while the trailing one catches up
-   * and brightens — like a "shimmer" advance. Filled shapes for visual weight matching
-   * the play/pause icon.
-   */
-  private fun drawSkipGlyph(
-    context: Context,
-    color: Int,
-    directionRight: Boolean,
-    progress: Float,
-  ): Bitmap {
-    val canvasPx = context.dp(42)
-    val bitmap = Bitmap.createBitmap(canvasPx, canvasPx, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val density = context.resources.displayMetrics.density
-    val sign = if (directionRight) 1f else -1f
-
-    val centerY = canvasPx / 2f
-    val centerX = canvasPx / 2f
-
-    // Chevron sizing — filled for weight.
-    val arm = 7.2f * density      // vertical arm length
-    val depth = 5.8f * density    // horizontal depth of each ">" arrowhead
-    val gap = 2.6f * density      // gap between the two chevrons
-    val headWidth = 2.8f * density // tip thickness
-
-    // Cascade: leading chevron moves faster, trailing one follows with delay.
-    val t = easeOutCubic(progress)
-    val marchMax = 6.5f * density
-    val leadMarch = t * marchMax * sign
-    val trailMarch = easeOutCubic((progress * 0.8f).coerceAtMost(1f)) * marchMax * 0.6f * sign
-
-    fun drawFilledChevron(originX: Float, alpha: Float) {
-      // A filled ">" arrowhead as a closed path.
-      val tipX = originX + depth * sign
-      val backX = originX
-      val halfArm = arm / 2f
-      val halfHead = headWidth / 2f
-
-      val path = Path()
-      // Outer point
-      path.moveTo(tipX, centerY)
-      // Upper back
-      path.lineTo(backX, centerY - halfArm)
-      // Upper inner notch
-      path.lineTo(backX - halfHead * sign, centerY - halfArm * 0.38f)
-      // Center pinch
-      path.lineTo(backX - halfHead * sign, centerY + halfArm * 0.38f)
-      // Lower inner notch
-      path.lineTo(backX, centerY + halfArm)
-      // Back to tip
-      path.close()
-
-      val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = color
-        style = Paint.Style.FILL
-      }
-      paint.alpha = (alpha * 255).toInt()
-      canvas.drawPath(path, paint)
-    }
-
-    // Lead chevron: moves ahead, fades out as it leaves.
-    val leadAlpha = (1f - 0.85f * easeInOutSine(progress)).coerceIn(0.10f, 1f)
-    // Trail chevron: starts dimmer, brightens as it takes over.
-    val trailAlpha = (0.40f + 0.60f * easeInOutSine(progress)).coerceIn(0.10f, 1f)
-
-    // Lead is the one further in the skip direction.
-    val leadOrigin = centerX + gap * sign + leadMarch
-    val trailOrigin = centerX - gap * sign + trailMarch
-
-    drawFilledChevron(leadOrigin, leadAlpha)
-    drawFilledChevron(trailOrigin, trailAlpha)
-    return bitmap
-  }
-
   private fun applyProgress(
     views: RemoteViews,
     snapshot: MediaPlaybackSnapshot,
@@ -606,23 +482,6 @@ private data class MediaWidgetStyle(
         MediaWidgetTheme.SamsungGlass,
         MediaWidgetTheme.AdaptiveGlass,
         MediaWidgetTheme.LightGlass -> false
-      }
-
-      // Scrim: just enough dark gradient at the bottom so white text stays legible.
-      // Keep it gentle — the blurred art is the star; the scrim only helps readability.
-      val scrimStrength = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.DarkGlass -> 0.62f
-        MediaWidgetTheme.AlbumColor -> 0.54f
-        MediaWidgetTheme.SamsungGlass,
-        MediaWidgetTheme.AdaptiveGlass,
-        MediaWidgetTheme.LightGlass -> 0.44f
-      }
-      // Colour wash: a very light tint of the cover's own colour. The blur itself
-      // already carries the palette; we just nudge it slightly to unify the tones.
-      val colorWashAlpha = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.AlbumColor -> 0.28f
-        MediaWidgetTheme.DarkGlass -> 0.22f
-        else -> 0.18f
       }
 
       val background = createBackgroundBitmap(
@@ -831,17 +690,8 @@ private fun extractPalette(artwork: Bitmap?): CoverPalette {
   return CoverPalette(dominant = dominant, vibrant = vibrant)
 }
 
-// ---------- easing ----------
-
-private fun easeInOutSine(t: Float): Float = (-(Math.cos(Math.PI * t) - 1) / 2).toFloat()
-private fun easeOutCubic(t: Float): Float = (1 - (1 - t).toDouble().pow(3.0)).toFloat()
 private fun gentlePressScale(progress: Float): Float =
   1f - 0.10f * sin((Math.PI * progress.coerceIn(0f, 1f)).toFloat())
-
-private fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
-  val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
-  return t * t * (3 - 2 * t)
-}
 
 // ---------- icon drawing ----------
 
@@ -945,21 +795,6 @@ private fun Context.blurredWallpaperBitmap(
     val drawable = WallpaperManager.getInstance(this).drawable ?: return@runCatching null
     val wallpaper = drawable.toBitmapForWidget()
     val tiny = wallpaper.centerCropScaled(40, 40)
-    val pass1 = stackBlur(tiny, 16)
-    val pass2 = stackBlur(pass1, 16)
-    Bitmap.createScaledBitmap(pass2, targetWidth, targetHeight, true)
-  }.getOrNull()
-}
-
-private fun Context.blurredArtworkBitmap(
-  artwork: Bitmap,
-  targetWidth: Int,
-  targetHeight: Int,
-): Bitmap? {
-  return runCatching {
-    // Tiny source + multi-pass blur + big upscale = heavy Samsung-style cream where only
-    // vague colours remain — no detail at all.
-    val tiny = artwork.centerCropScaled(40, 40)
     val pass1 = stackBlur(tiny, 16)
     val pass2 = stackBlur(pass1, 16)
     Bitmap.createScaledBitmap(pass2, targetWidth, targetHeight, true)
