@@ -1,6 +1,7 @@
 .gradle/
 .idea/
 .kotlin/
+.codex-remote-attachments/
 build/
 **/build/
 local.properties
