@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.6",
-      "releaseDate": "2026-06-24",
-      "changelog": "Widget Media Controls rifinito: scelta colore album piu stabile con media pesata dei colori reali della cover, preview impostazioni piu fedele al widget con progress e controlli, e mantenimento del look Samsung blur con cover solo nel riquadro.",
-      "releaseTag": "stable-pampa-widgets-v0.2.6",
-      "apkAsset": "pampa-widgets-0.2.6.apk",
+      "version": "0.2.7",
+      "releaseDate": "2026-06-25",
+      "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
+      "releaseTag": "stable-pampa-widgets-v0.2.7",
+      "apkAsset": "pampa-widgets-0.2.7.apk",
       "exeAsset": "",
-      "sizeBytes": 52372557
+      "sizeBytes": 52356227
     },
     "beta": {
-      "version": "0.2.6",
-      "releaseDate": "2026-06-24",
-      "changelog": "Widget Media Controls rifinito: scelta colore album piu stabile con media pesata dei colori reali della cover, preview impostazioni piu fedele al widget con progress e controlli, e mantenimento del look Samsung blur con cover solo nel riquadro.",
-      "releaseTag": "stable-pampa-widgets-v0.2.6",
-      "apkAsset": "pampa-widgets-0.2.6.apk",
+      "version": "0.2.7",
+      "releaseDate": "2026-06-25",
+      "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
+      "releaseTag": "stable-pampa-widgets-v0.2.7",
+      "apkAsset": "pampa-widgets-0.2.7.apk",
       "exeAsset": "",
-      "sizeBytes": 52372557
+      "sizeBytes": 52356227
     },
     "history": [
+      {
+        "version": "0.2.6",
+        "releaseDate": "2026-06-24",
+        "changelog": "Widget Media Controls rifinito: scelta colore album piu stabile con media pesata dei colori reali della cover, preview impostazioni piu fedele al widget con progress e controlli, e mantenimento del look Samsung blur con cover solo nel riquadro.",
+        "releaseTag": "stable-pampa-widgets-v0.2.6",
+        "apkAsset": "pampa-widgets-0.2.6.apk",
+        "exeAsset": "",
+        "sizeBytes": 52372557
+      },
       {
         "version": "0.2.5",
         "releaseDate": "2026-06-24",
