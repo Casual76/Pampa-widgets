@@ -13,7 +13,6 @@ interface SettingsRepository {
   suspend fun setAutomaticUpdateChecksEnabled(enabled: Boolean)
   suspend fun setMediaWidgetTheme(theme: MediaWidgetTheme)
   suspend fun setMediaWidgetArtworkSize(size: MediaWidgetArtworkSize)
-  suspend fun setMediaWidgetBlurBackground(enabled: Boolean)
   suspend fun setMediaWidgetShowSource(enabled: Boolean)
   suspend fun setMediaWidgetShowArtist(enabled: Boolean)
   suspend fun setMediaWidgetKeepLastSong(enabled: Boolean)

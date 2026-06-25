@@ -148,13 +148,6 @@ class MainViewModel @Inject constructor(
     }
   }
 
-  fun setMediaWidgetBlurBackground(enabled: Boolean) {
-    viewModelScope.launch {
-      settingsRepository.setMediaWidgetBlurBackground(enabled)
-      MediaWidgetUpdater.updateAll(context)
-    }
-  }
-
   fun setMediaWidgetShowSource(enabled: Boolean) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetShowSource(enabled)

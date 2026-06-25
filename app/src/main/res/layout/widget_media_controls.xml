@@ -35,8 +35,8 @@
 
       <FrameLayout
         android:id="@+id/media_widget_artwork_frame"
-        android:layout_width="98dp"
-        android:layout_height="98dp"
+        android:layout_width="106dp"
+        android:layout_height="106dp"
         android:background="@drawable/bg_media_artwork">
 
         <ImageView
@@ -76,13 +76,14 @@
           android:id="@+id/media_widget_title"
           android:layout_width="match_parent"
           android:layout_height="wrap_content"
-          android:layout_marginTop="7dp"
+          android:layout_marginTop="6dp"
           android:ellipsize="end"
+          android:fontFamily="sans-serif-medium"
           android:includeFontPadding="false"
           android:maxLines="2"
           android:text="Nessuna riproduzione"
           android:textColor="@color/widget_on_surface"
-          android:textSize="16sp"
+          android:textSize="18sp"
           android:textStyle="bold" />
 
         <TextView
@@ -91,11 +92,12 @@
           android:layout_height="wrap_content"
           android:layout_marginTop="3dp"
           android:ellipsize="end"
+          android:fontFamily="sans-serif"
           android:includeFontPadding="false"
           android:maxLines="1"
           android:text="Apri Spotify o YouTube Music"
           android:textColor="@color/widget_on_surface_variant"
-          android:textSize="13sp" />
+          android:textSize="14sp" />
 
         <TextView
           android:id="@+id/media_widget_permission"

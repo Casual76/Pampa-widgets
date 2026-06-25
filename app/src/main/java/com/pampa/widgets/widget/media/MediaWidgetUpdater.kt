@@ -2,7 +2,6 @@ package com.pampa.widgets.widget.media
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
-import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -15,8 +14,6 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -49,9 +46,8 @@ private const val CompanionBG_RADIUS = 56f
  * Builds the RemoteViews for the Media Controls widget and drives the press feedback
  * animations.
  *
- * Visual language: Samsung-like frosted wallpaper glass. Artwork is shown only in the square
- * cover frame; its palette is used as a tint over the blurred wallpaper, never as the card
- * background image.
+ * Visual language: Samsung-like album-tinted glass. Artwork is shown only in the square
+ * cover frame; its palette is used as a flat tint, never as the card background image.
  */
 object MediaWidgetUpdater {
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -63,7 +59,7 @@ object MediaWidgetUpdater {
   private var activeAnimAction: MediaControlAction? = null
   private var animSnapshot: MediaPlaybackSnapshot? = null
   private var animStartElapsed: Long = 0L
-  // Pre-computed once per run so frames are cheap and never re-blur.
+  // Pre-computed once per run so feedback frames stay cheap.
   private var animCachedStyle: MediaWidgetStyle? = null
   private var animDonePosted = false
 
@@ -282,9 +278,9 @@ object MediaWidgetUpdater {
     settings: AppSettings,
   ) {
     val artworkDp = when (settings.mediaWidgetArtworkSize) {
-      MediaWidgetArtworkSize.Compact -> 82f
-      MediaWidgetArtworkSize.Balanced -> 92f
-      MediaWidgetArtworkSize.Large -> 104f
+      MediaWidgetArtworkSize.Compact -> 88f
+      MediaWidgetArtworkSize.Balanced -> 100f
+      MediaWidgetArtworkSize.Large -> 112f
     }
     views.setViewLayoutWidth(R.id.media_widget_artwork_frame, artworkDp, TypedValue.COMPLEX_UNIT_DIP)
     views.setViewLayoutHeight(R.id.media_widget_artwork_frame, artworkDp, TypedValue.COMPLEX_UNIT_DIP)
@@ -485,7 +481,6 @@ private data class MediaWidgetStyle(
       }
 
       val background = createBackgroundBitmap(
-        context = context,
         accent = accent,
         dominant = palette.dominant,
         settings = settings,
@@ -521,7 +516,6 @@ private data class MediaWidgetStyle(
     }
 
     private fun createBackgroundBitmap(
-      context: Context,
       accent: Int,
       dominant: Int,
       settings: AppSettings,
@@ -536,57 +530,48 @@ private data class MediaWidgetStyle(
       val layer = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
       val layerCanvas = Canvas(layer)
 
-      val wallpaper = if (settings.mediaWidgetBlurBackground) {
-        context.blurredWallpaperBitmap(width, height)
-      } else {
-        null
+      val baseColor = when (settings.mediaWidgetTheme) {
+        MediaWidgetTheme.DarkGlass -> dominant
+          .darken(0.48f)
+          .blendWith(Color.rgb(18, 22, 20), 0.58f)
+          .withAlpha(238)
+        MediaWidgetTheme.AlbumColor -> if (darkSurface) {
+          dominant.darken(0.34f).withAlpha(238)
+        } else {
+          dominant.lighten(0.64f).withAlpha(242)
+        }
+        MediaWidgetTheme.AdaptiveGlass -> dominant
+          .lighten(0.82f)
+          .blendWith(Color.rgb(245, 247, 243), 0.68f)
+          .withAlpha(242)
+        MediaWidgetTheme.LightGlass -> Color.argb(244, 255, 255, 250)
+        MediaWidgetTheme.SamsungGlass -> dominant
+          .lighten(0.76f)
+          .blendWith(Color.rgb(246, 243, 236), 0.58f)
+          .withAlpha(242)
       }
-      if (wallpaper != null) {
-        layerCanvas.drawBitmap(
-          wallpaper,
-          null,
-          bounds,
-          Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            alpha = when (settings.mediaWidgetTheme) {
-              MediaWidgetTheme.DarkGlass -> 178
-              MediaWidgetTheme.AlbumColor -> 150
-              else -> 188
-            }
-            isFilterBitmap = true
-          },
-        )
-      } else {
-        layerCanvas.drawRoundRect(
-          bounds,
-          radius,
-          radius,
-          Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (darkSurface) dominant.darken(0.38f).withAlpha(214) else Color.argb(218, 244, 243, 237)
-          },
-        )
-      }
+      layerCanvas.drawRoundRect(bounds, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = baseColor })
 
-      // 2. COLOUR WASH: the cover's own colour laid over the blur so "restino solo i colori
       //    vagamente" — dreamy, vaguely-coloured, like Samsung system widgets.
       val glassColor = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.DarkGlass -> Color.argb(156, 18, 22, 20)
+        MediaWidgetTheme.DarkGlass -> Color.argb(44, 0, 0, 0)
         MediaWidgetTheme.AlbumColor -> if (darkSurface) {
-          accent.darken(0.28f).withAlpha(168)
+          accent.darken(0.28f).withAlpha(82)
         } else {
-          accent.lighten(0.60f).withAlpha(150)
+          accent.lighten(0.58f).withAlpha(72)
         }
-        MediaWidgetTheme.AdaptiveGlass -> Color.argb(178, 246, 247, 243)
-        MediaWidgetTheme.LightGlass -> Color.argb(216, 255, 255, 250)
-        MediaWidgetTheme.SamsungGlass -> Color.argb(198, 245, 244, 238)
+        MediaWidgetTheme.AdaptiveGlass -> Color.argb(52, 255, 255, 255)
+        MediaWidgetTheme.LightGlass -> Color.argb(58, 255, 255, 255)
+        MediaWidgetTheme.SamsungGlass -> Color.argb(46, 255, 255, 255)
       }
       layerCanvas.drawRoundRect(bounds, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = glassColor })
 
       val tintAlpha = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.AlbumColor -> 82
-        MediaWidgetTheme.DarkGlass -> 50
-        MediaWidgetTheme.AdaptiveGlass -> 46
-        MediaWidgetTheme.LightGlass -> 38
-        MediaWidgetTheme.SamsungGlass -> 58
+        MediaWidgetTheme.AlbumColor -> 62
+        MediaWidgetTheme.DarkGlass -> 38
+        MediaWidgetTheme.AdaptiveGlass -> 34
+        MediaWidgetTheme.LightGlass -> 28
+        MediaWidgetTheme.SamsungGlass -> 44
       }
       layerCanvas.drawRoundRect(bounds, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent.withAlpha(tintAlpha) })
 
@@ -789,48 +774,6 @@ private fun Bitmap.roundedSquare(): Bitmap {
   return output
 }
 
-/**
- * Center-crops then scales to the target size. Used to feed a small image into the blur so
- * the result is genuinely creamy rather than a faintly soft photo.
- */
-private fun Bitmap.centerCropScaled(
-  targetWidth: Int,
-  targetHeight: Int,
-): Bitmap {
-  val scale = max(targetWidth.toFloat() / width, targetHeight.toFloat() / height)
-  val scaledWidth = (width * scale).toInt().coerceAtLeast(targetWidth)
-  val scaledHeight = (height * scale).toInt().coerceAtLeast(targetHeight)
-  val scaled = Bitmap.createScaledBitmap(this, scaledWidth, scaledHeight, true)
-  val left = ((scaledWidth - targetWidth) / 2).coerceAtLeast(0)
-  val top = ((scaledHeight - targetHeight) / 2).coerceAtLeast(0)
-  return Bitmap.createBitmap(scaled, left, top, targetWidth, targetHeight)
-}
-
-private fun Context.blurredWallpaperBitmap(
-  targetWidth: Int,
-  targetHeight: Int,
-): Bitmap? {
-  return runCatching {
-    val drawable = WallpaperManager.getInstance(this).drawable ?: return@runCatching null
-    val wallpaper = drawable.toBitmapForWidget()
-    val tiny = wallpaper.centerCropScaled(40, 40)
-    val pass1 = stackBlur(tiny, 16)
-    val pass2 = stackBlur(pass1, 16)
-    Bitmap.createScaledBitmap(pass2, targetWidth, targetHeight, true)
-  }.getOrNull()
-}
-
-private fun Drawable.toBitmapForWidget(): Bitmap {
-  if (this is BitmapDrawable && bitmap != null) return bitmap
-  val width = intrinsicWidth.takeIf { it > 0 } ?: 1080
-  val height = intrinsicHeight.takeIf { it > 0 } ?: 1920
-  val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-  val canvas = Canvas(bitmap)
-  setBounds(0, 0, canvas.width, canvas.height)
-  draw(canvas)
-  return bitmap
-}
-
 private fun Int.luminance(): Float =
   (0.299f * Color.red(this) + 0.587f * Color.green(this) + 0.114f * Color.blue(this)) / 255f
 
@@ -845,6 +788,16 @@ private fun Int.darken(amount: Float): Int = Color.rgb(
   (Color.green(this) * (1f - amount)).toInt().coerceIn(0, 255),
   (Color.blue(this) * (1f - amount)).toInt().coerceIn(0, 255),
 )
+
+private fun Int.blendWith(other: Int, amount: Float): Int {
+  val t = amount.coerceIn(0f, 1f)
+  fun channel(a: Int, b: Int) = (a * (1f - t) + b * t).toInt().coerceIn(0, 255)
+  return Color.rgb(
+    channel(Color.red(this), Color.red(other)),
+    channel(Color.green(this), Color.green(other)),
+    channel(Color.blue(this), Color.blue(other)),
+  )
+}
 
 /** Pushes a greyish colour toward a richer version of itself by stretching RGB away from grey. */
 private fun Int.enrich(amount: Float): Int {
@@ -864,163 +817,3 @@ private fun RectF.insetBy(amount: Float): RectF =
 
 private fun Context.dp(value: Int): Int =
   (value * resources.displayMetrics.density).toInt()
-
-// ---------- stack blur ----------
-
-private fun stackBlur(sentBitmap: Bitmap, radius: Int): Bitmap {
-  val bitmap = sentBitmap.copy(Bitmap.Config.ARGB_8888, true)
-  if (radius < 1) return sentBitmap
-  val w = bitmap.width
-  val h = bitmap.height
-  val pix = IntArray(w * h)
-  bitmap.getPixels(pix, 0, w, 0, 0, w, h)
-
-  val wm = w - 1
-  val hm = h - 1
-  val wh = w * h
-  val div = radius + radius + 1
-
-  val r = IntArray(wh)
-  val g = IntArray(wh)
-  val b = IntArray(wh)
-  var rsum: Int
-  var gsum: Int
-  var bsum: Int
-  var p: Int
-  var yp: Int
-  var yi: Int
-  var yw: Int
-
-  val vmin = IntArray(maxOf(w, h))
-
-  val dv = IntArray(256 * div)
-  for (idx in 0 until 256 * div) {
-    dv[idx] = idx / div
-  }
-
-  yw = 0
-  yi = 0
-
-  val stack = Array(div) { IntArray(3) }
-  var stackpointer: Int
-  var stackstart: Int
-  var sir: IntArray
-  var rbs: Int
-  val r1 = radius + 1
-  var routsum: Int
-  var goutsum: Int
-  var boutsum: Int
-  var rinsum: Int
-  var ginsum: Int
-  var binsum: Int
-
-  for (currY in 0 until h) {
-    rinsum = 0; ginsum = 0; binsum = 0
-    routsum = 0; goutsum = 0; boutsum = 0
-    rsum = 0; gsum = 0; bsum = 0
-    for (currI in -radius..radius) {
-      p = pix[yi + minOf(wm, maxOf(currI, 0))]
-      sir = stack[currI + radius]
-      sir[0] = (p and 0xff0000) shr 16
-      sir[1] = (p and 0x00ff00) shr 8
-      sir[2] = (p and 0x0000ff)
-      rbs = r1 - abs(currI)
-      rsum += sir[0] * rbs
-      gsum += sir[1] * rbs
-      bsum += sir[2] * rbs
-      if (currI > 0) {
-        rinsum += sir[0]; ginsum += sir[1]; binsum += sir[2]
-      } else {
-        routsum += sir[0]; goutsum += sir[1]; boutsum += sir[2]
-      }
-    }
-    stackpointer = radius
-
-    for (currX in 0 until w) {
-      r[yi] = dv[rsum]; g[yi] = dv[gsum]; b[yi] = dv[bsum]
-
-      rsum -= routsum; gsum -= goutsum; bsum -= boutsum
-
-      stackstart = stackpointer - radius + div
-      sir = stack[stackstart % div]
-
-      routsum -= sir[0]; goutsum -= sir[1]; boutsum -= sir[2]
-
-      if (currY == 0) vmin[currX] = minOf(currX + radius + 1, wm)
-      p = pix[yw + vmin[currX]]
-
-      sir[0] = (p and 0xff0000) shr 16
-      sir[1] = (p and 0x00ff00) shr 8
-      sir[2] = (p and 0x0000ff)
-
-      rinsum += sir[0]; ginsum += sir[1]; binsum += sir[2]
-
-      rsum += rinsum; gsum += ginsum; bsum += binsum
-
-      stackpointer = (stackpointer + 1) % div
-      sir = stack[stackpointer % div]
-
-      routsum += sir[0]; goutsum += sir[1]; boutsum += sir[2]
-
-      rinsum -= sir[0]; ginsum -= sir[1]; binsum -= sir[2]
-
-      yi++
-    }
-    yw += w
-  }
-
-  for (currX in 0 until w) {
-    rinsum = 0; ginsum = 0; binsum = 0
-    routsum = 0; goutsum = 0; boutsum = 0
-    rsum = 0; gsum = 0; bsum = 0
-    yp = -radius * w
-    for (currI in -radius..radius) {
-      yi = maxOf(0, yp) + currX
-      sir = stack[currI + radius]
-      sir[0] = r[yi]; sir[1] = g[yi]; sir[2] = b[yi]
-      rbs = r1 - abs(currI)
-      rsum += r[yi] * rbs
-      gsum += g[yi] * rbs
-      bsum += b[yi] * rbs
-      if (currI > 0) {
-        rinsum += sir[0]; ginsum += sir[1]; binsum += sir[2]
-      } else {
-        routsum += sir[0]; goutsum += sir[1]; boutsum += sir[2]
-      }
-      yp += w
-    }
-    yi = currX
-    stackpointer = radius
-    for (currY in 0 until h) {
-      pix[yi] = (pix[yi] and -0x1000000) or (dv[rsum] shl 16) or (dv[gsum] shl 8) or dv[bsum]
-
-      rsum -= routsum; gsum -= goutsum; bsum -= boutsum
-
-      stackstart = stackpointer - radius + div
-      sir = stack[stackstart % div]
-
-      routsum -= sir[0]; goutsum -= sir[1]; boutsum -= sir[2]
-
-      if (currX == 0) vmin[currY] = minOf(currY + r1, hm) * w
-      p = currX + vmin[currY]
-
-      sir[0] = r[p]; sir[1] = g[p]; sir[2] = b[p]
-
-      rinsum += sir[0]; ginsum += sir[1]; binsum += sir[2]
-
-      rsum += rinsum; gsum += ginsum; bsum += binsum
-
-      stackpointer = (stackpointer + 1) % div
-      sir = stack[stackpointer]
-
-      routsum += sir[0]; goutsum += sir[1]; boutsum += sir[2]
-
-      rinsum -= sir[0]; ginsum -= sir[1]; binsum -= sir[2]
-
-      yi += w
-    }
-  }
-
-  bitmap.setPixels(pix, 0, w, 0, 0, w, h)
-  return bitmap
-}

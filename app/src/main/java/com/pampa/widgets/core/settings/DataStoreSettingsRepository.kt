@@ -75,10 +75,6 @@ internal class PreferencesSettingsRepository(
     dataStore.edit { it[Keys.MediaWidgetArtworkSize] = size.name }
   }
 
-  override suspend fun setMediaWidgetBlurBackground(enabled: Boolean) {
-    dataStore.edit { it[Keys.MediaWidgetBlurBackground] = enabled }
-  }
-
   override suspend fun setMediaWidgetShowSource(enabled: Boolean) {
     dataStore.edit { it[Keys.MediaWidgetShowSource] = enabled }
   }
@@ -108,7 +104,6 @@ internal class PreferencesSettingsRepository(
     val AutomaticUpdateChecks = booleanPreferencesKey("automatic_update_checks")
     val MediaWidgetTheme = stringPreferencesKey("media_widget_theme")
     val MediaWidgetArtworkSize = stringPreferencesKey("media_widget_artwork_size")
-    val MediaWidgetBlurBackground = booleanPreferencesKey("media_widget_blur_background")
     val MediaWidgetShowSource = booleanPreferencesKey("media_widget_show_source")
     val MediaWidgetShowArtist = booleanPreferencesKey("media_widget_show_artist")
     val MediaWidgetKeepLastSong = booleanPreferencesKey("media_widget_keep_last_song")
@@ -139,13 +134,12 @@ private fun Preferences.toAppSettings(): AppSettings {
       MediaWidgetTheme.SamsungGlass,
     ),
     mediaWidgetArtworkSize = this[PreferencesSettingsRepository.Keys.MediaWidgetArtworkSize].toEnumOrDefault(
-      MediaWidgetArtworkSize.Balanced,
+      MediaWidgetArtworkSize.Large,
     ),
-    mediaWidgetBlurBackground = this[PreferencesSettingsRepository.Keys.MediaWidgetBlurBackground] ?: true,
-    mediaWidgetShowSource = this[PreferencesSettingsRepository.Keys.MediaWidgetShowSource] ?: true,
+    mediaWidgetShowSource = this[PreferencesSettingsRepository.Keys.MediaWidgetShowSource] ?: false,
     mediaWidgetShowArtist = this[PreferencesSettingsRepository.Keys.MediaWidgetShowArtist] ?: true,
     mediaWidgetKeepLastSong = this[PreferencesSettingsRepository.Keys.MediaWidgetKeepLastSong] ?: true,
-    mediaWidgetInstantControls = this[PreferencesSettingsRepository.Keys.MediaWidgetInstantControls] ?: true,
+    mediaWidgetInstantControls = this[PreferencesSettingsRepository.Keys.MediaWidgetInstantControls] ?: false,
     mediaWidgetAnimatedFeedback = this[PreferencesSettingsRepository.Keys.MediaWidgetAnimatedFeedback] ?: false,
   )
 }

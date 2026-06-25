@@ -92,7 +92,6 @@ class MediaWidgetConfigurationActivity : ComponentActivity() {
           mediaNotificationAccessGranted = uiState.mediaNotificationAccessGranted,
           onThemeChange = viewModel::setMediaWidgetTheme,
           onArtworkSizeChange = viewModel::setMediaWidgetArtworkSize,
-          onBlurBackgroundChange = viewModel::setMediaWidgetBlurBackground,
           onShowSourceChange = viewModel::setMediaWidgetShowSource,
           onShowArtistChange = viewModel::setMediaWidgetShowArtist,
           onKeepLastSongChange = viewModel::setMediaWidgetKeepLastSong,
@@ -123,7 +122,6 @@ private fun MediaWidgetConfigurationScreen(
   mediaNotificationAccessGranted: Boolean,
   onThemeChange: (MediaWidgetTheme) -> Unit,
   onArtworkSizeChange: (MediaWidgetArtworkSize) -> Unit,
-  onBlurBackgroundChange: (Boolean) -> Unit,
   onShowSourceChange: (Boolean) -> Unit,
   onShowArtistChange: (Boolean) -> Unit,
   onKeepLastSongChange: (Boolean) -> Unit,
@@ -181,14 +179,14 @@ private fun MediaWidgetConfigurationScreen(
           SectionHeader(
             icon = Icons.Rounded.Palette,
             title = "Aspetto",
-            subtitle = "Vetro Samsung, tinta dalla canzone e cover nel riquadro.",
+            subtitle = "Superficie pulita, tinta dalla canzone e cover nel riquadro.",
           )
           Spacer(Modifier.height(14.dp))
           FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
-            ThemeChip("Samsung blur", MediaWidgetTheme.SamsungGlass, settings.mediaWidgetTheme, onThemeChange)
+            ThemeChip("Vetro", MediaWidgetTheme.SamsungGlass, settings.mediaWidgetTheme, onThemeChange)
             ThemeChip("Album", MediaWidgetTheme.AlbumColor, settings.mediaWidgetTheme, onThemeChange)
             ThemeChip("Chiaro", MediaWidgetTheme.LightGlass, settings.mediaWidgetTheme, onThemeChange)
             ThemeChip("Scuro", MediaWidgetTheme.DarkGlass, settings.mediaWidgetTheme, onThemeChange)
@@ -213,10 +211,9 @@ private fun MediaWidgetConfigurationScreen(
           SectionHeader(
             icon = Icons.Rounded.Settings,
             title = "Comportamento",
-            subtitle = "Sessioni musicali, cache e feedback dei controlli.",
+            subtitle = "Sessioni musicali, cache e risposta dei controlli.",
           )
           Spacer(Modifier.height(12.dp))
-          ConfigSwitchRow("Blur wallpaper", "Sfondo opaco con wallpaper sfocato e tinta album.", settings.mediaWidgetBlurBackground, onBlurBackgroundChange)
           ConfigSwitchRow("Sorgente", "Mostra Spotify, YouTube Music, Apple Music e simili.", settings.mediaWidgetShowSource, onShowSourceChange)
           ConfigSwitchRow("Artista", "Mostra la riga secondaria sotto il titolo.", settings.mediaWidgetShowArtist, onShowArtistChange)
           ConfigSwitchRow("Ultima canzone", "Mantiene titolo e cover quando Samsung nasconde la sessione.", settings.mediaWidgetKeepLastSong, onKeepLastSongChange)
@@ -287,9 +284,9 @@ private fun WidgetPreview(settings: AppSettings) {
           modifier = Modifier
             .size(
               when (settings.mediaWidgetArtworkSize) {
-                MediaWidgetArtworkSize.Compact -> 74.dp
-                MediaWidgetArtworkSize.Balanced -> 84.dp
-                MediaWidgetArtworkSize.Large -> 94.dp
+                MediaWidgetArtworkSize.Compact -> 80.dp
+                MediaWidgetArtworkSize.Balanced -> 92.dp
+                MediaWidgetArtworkSize.Large -> 104.dp
               },
             )
             .clip(MaterialTheme.shapes.large)
