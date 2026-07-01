@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.7",
-      "releaseDate": "2026-06-25",
-      "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
-      "releaseTag": "stable-pampa-widgets-v0.2.7",
-      "apkAsset": "pampa-widgets-0.2.7.apk",
+      "version": "0.2.8",
+      "releaseDate": "2026-07-01",
+      "changelog": "Widget media più rifinito: sfondo a gradiente morbido basato sul colore album, pulsante play con contrasto adattivo, layout responsivo da 2x2 a pagina intera, controlli extra per refresh/apertura app e copertura automatizzata delle configurazioni principali.",
+      "releaseTag": "stable-pampa-widgets-v0.2.8",
+      "apkAsset": "pampa-widgets-0.2.8.apk",
       "exeAsset": "",
-      "sizeBytes": 52356227
+      "sizeBytes": 52391186
     },
     "beta": {
-      "version": "0.2.7",
-      "releaseDate": "2026-06-25",
-      "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
-      "releaseTag": "stable-pampa-widgets-v0.2.7",
-      "apkAsset": "pampa-widgets-0.2.7.apk",
+      "version": "0.2.8",
+      "releaseDate": "2026-07-01",
+      "changelog": "Widget media più rifinito: sfondo a gradiente morbido basato sul colore album, pulsante play con contrasto adattivo, layout responsivo da 2x2 a pagina intera, controlli extra per refresh/apertura app e copertura automatizzata delle configurazioni principali.",
+      "releaseTag": "stable-pampa-widgets-v0.2.8",
+      "apkAsset": "pampa-widgets-0.2.8.apk",
       "exeAsset": "",
-      "sizeBytes": 52356227
+      "sizeBytes": 52391186
     },
     "history": [
+      {
+        "version": "0.2.7",
+        "releaseDate": "2026-06-25",
+        "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
+        "releaseTag": "stable-pampa-widgets-v0.2.7",
+        "apkAsset": "pampa-widgets-0.2.7.apk",
+        "exeAsset": "",
+        "sizeBytes": 52356227
+      },
       {
         "version": "0.2.6",
         "releaseDate": "2026-06-24",
