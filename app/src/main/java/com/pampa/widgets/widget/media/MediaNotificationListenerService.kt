@@ -1,16 +1,37 @@
 package com.pampa.widgets.widget.media
 
+import android.app.Notification
 import android.content.ComponentName
+import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.pampa.widgets.core.media.MediaSessionReader
+import com.pampa.widgets.core.media.isSupportedMusicPackage
 
 class MediaNotificationListenerService : NotificationListenerService() {
   private var mediaSessionManager: MediaSessionManager? = null
   private var isSessionCallbackRegistered = false
+  private var observedController: MediaController? = null
+
+  private val controllerCallback = object : MediaController.Callback() {
+    override fun onPlaybackStateChanged(state: android.media.session.PlaybackState?) {
+      MediaWidgetUpdater.updateAll(applicationContext)
+    }
+
+    override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {
+      MediaWidgetUpdater.updateAll(applicationContext)
+    }
+
+    override fun onSessionDestroyed() {
+      refreshObservedController()
+      MediaWidgetUpdater.updateAll(applicationContext)
+    }
+  }
 
   private val activeSessionsChangedListener =
     MediaSessionManager.OnActiveSessionsChangedListener {
+      refreshObservedController()
       MediaWidgetUpdater.updateAll(applicationContext)
     }
 
@@ -22,24 +43,33 @@ class MediaNotificationListenerService : NotificationListenerService() {
   override fun onListenerConnected() {
     super.onListenerConnected()
     registerSessionCallback()
+    refreshObservedController()
     MediaWidgetUpdater.updateAll(applicationContext)
   }
 
   override fun onListenerDisconnected() {
+    clearObservedController()
     unregisterSessionCallback()
     MediaWidgetUpdater.updateAll(applicationContext)
     super.onListenerDisconnected()
   }
 
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
-    MediaWidgetUpdater.updateAll(applicationContext)
+    if (sbn?.isRelevantMediaSignal() == true) {
+      refreshObservedController()
+      MediaWidgetUpdater.updateAll(applicationContext)
+    }
   }
 
   override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-    MediaWidgetUpdater.updateAll(applicationContext)
+    if (sbn?.isRelevantMediaSignal() == true) {
+      refreshObservedController()
+      MediaWidgetUpdater.updateAll(applicationContext)
+    }
   }
 
   override fun onDestroy() {
+    clearObservedController()
     unregisterSessionCallback()
     super.onDestroy()
   }
@@ -62,5 +92,26 @@ class MediaNotificationListenerService : NotificationListenerService() {
       mediaSessionManager?.removeOnActiveSessionsChangedListener(activeSessionsChangedListener)
     }
     isSessionCallbackRegistered = false
+  }
+
+  private fun refreshObservedController() {
+    val next = MediaSessionReader.currentController(applicationContext)
+    val current = observedController
+    if (current?.sessionToken == next?.sessionToken) return
+    current?.unregisterCallback(controllerCallback)
+    observedController = next
+    next?.registerCallback(controllerCallback)
+  }
+
+  private fun clearObservedController() {
+    observedController?.unregisterCallback(controllerCallback)
+    observedController = null
+  }
+
+  private fun StatusBarNotification.isRelevantMediaSignal(): Boolean {
+    val mediaNotification = notification
+    return isSupportedMusicPackage(packageName) ||
+      mediaNotification.category == Notification.CATEGORY_TRANSPORT ||
+      mediaNotification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
   }
 }

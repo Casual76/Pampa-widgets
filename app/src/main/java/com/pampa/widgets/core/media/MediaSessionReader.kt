@@ -4,11 +4,13 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.SystemClock
+import android.view.KeyEvent
 import com.pampa.widgets.widget.media.MediaNotificationListenerService
 
 object MediaSessionReader {
@@ -38,7 +40,16 @@ object MediaSessionReader {
   }
 
   fun dispatch(context: Context, action: MediaControlAction): Boolean {
-    val controller = activeController(context) ?: return false
+    if (!NotificationListenerAccess.isGranted(context)) return false
+    val controller = activeController(context)
+    val dispatchedToSession = controller?.let { dispatchToController(it, action) } ?: false
+    return dispatchedToSession || dispatchMediaKeyFallback(context, action)
+  }
+
+  /** Lets the notification listener observe the same controller used by the widget. */
+  internal fun currentController(context: Context): MediaController? = activeController(context)
+
+  private fun dispatchToController(controller: MediaController, action: MediaControlAction): Boolean {
     val controls = controller.transportControls
     return runCatching {
       when (action) {
@@ -49,6 +60,31 @@ object MediaSessionReader {
         MediaControlAction.Previous -> controls.skipToPrevious()
       }
     }.isSuccess
+  }
+
+  /**
+   * The platform retains the current media-button target longer than some apps retain a visible
+   * MediaController. This restores play/skip from a cached widget state after an idle period.
+   */
+  private fun dispatchMediaKeyFallback(context: Context, action: MediaControlAction): Boolean {
+    val snapshot = readSnapshot(context, keepLastSong = true)
+    if (!snapshot.canDispatch(action)) return false
+    val keyCode = when (action) {
+      MediaControlAction.TogglePlayPause -> if (snapshot.isPlaying) {
+        KeyEvent.KEYCODE_MEDIA_PAUSE
+      } else {
+        KeyEvent.KEYCODE_MEDIA_PLAY
+      }
+      MediaControlAction.Next -> KeyEvent.KEYCODE_MEDIA_NEXT
+      MediaControlAction.Previous -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+    }
+    val audioManager = context.getSystemService(AudioManager::class.java) ?: return false
+    return runCatching {
+      val now = SystemClock.uptimeMillis()
+      audioManager.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+      audioManager.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
+      true
+    }.getOrDefault(false)
   }
 
   fun sessionActivity(context: Context): PendingIntent? {
@@ -85,7 +121,9 @@ object MediaSessionReader {
       isPlaying = state?.state.isActivelyPlaying(),
       hasMetadata = metadata != null,
       hasSongIdentity = title.isNotBlank() && artist.isNotBlank(),
-      supportsTransportControls = (state?.actions ?: 0L) != 0L,
+      // Some players clear the advertised action bitmask while idle but still accept transport
+      // calls (or retain a media-button receiver). Keep that controller eligible.
+      supportsTransportControls = state != null || metadata != null,
       lastPositionUpdateTime = state?.lastPositionUpdateTime ?: 0L,
     )
   }
@@ -108,22 +146,39 @@ object MediaSessionReader {
     )
     val actions = state?.actions ?: 0L
     val cached = if (keepLastSong) MediaPlaybackCache.read(context) else null
+    val allowsFallbackTransport = isSupportedMusicPackage(packageName) &&
+      (state != null || metadata != null) && actions == 0L
+    val canPlayPause = actions.hasAny(
+      PlaybackState.ACTION_PLAY,
+      PlaybackState.ACTION_PAUSE,
+      PlaybackState.ACTION_PLAY_PAUSE,
+    ) || allowsFallbackTransport
+    val canSkipNext = actions.hasAny(PlaybackState.ACTION_SKIP_TO_NEXT) || allowsFallbackTransport
+    val canSkipPrevious = actions.hasAny(PlaybackState.ACTION_SKIP_TO_PREVIOUS) || allowsFallbackTransport
+    val isPlaying = state?.let { it.state.isActivelyPlaying() } ?: cached?.isPlaying ?: false
     if (title.isBlank() || artist.isBlank()) {
       return cached?.copy(
-        isPlaying = state?.state.isActivelyPlaying(),
-        canPlayPause = actions.hasAny(
-          PlaybackState.ACTION_PLAY,
-          PlaybackState.ACTION_PAUSE,
-          PlaybackState.ACTION_PLAY_PAUSE,
-        ),
-        canSkipNext = actions.hasAny(PlaybackState.ACTION_SKIP_TO_NEXT),
-        canSkipPrevious = actions.hasAny(PlaybackState.ACTION_SKIP_TO_PREVIOUS),
+        availability = MediaPlaybackAvailability.Active,
+        sourceLabel = appLabel(context, packageName),
+        packageName = packageName,
+        isPlaying = isPlaying,
+        canPlayPause = canPlayPause,
+        canSkipNext = canSkipNext,
+        canSkipPrevious = canSkipPrevious,
+        // Do not carry over the previous song's artwork while the new track metadata is loading.
+        // Showing the old cover with new (or missing) track info is the "previous cover" bug.
+        artwork = null,
         isFromCache = true,
       ) ?: MediaPlaybackSnapshot(
-        availability = MediaPlaybackAvailability.NoSession,
-        title = "Nessuna traccia visibile",
-        artist = "Avvia una canzone da un'app musicale.",
+        availability = MediaPlaybackAvailability.Active,
+        title = appLabel(context, packageName),
+        artist = "Sessione media attiva",
         sourceLabel = appLabel(context, packageName),
+        packageName = packageName,
+        isPlaying = isPlaying,
+        canPlayPause = canPlayPause,
+        canSkipNext = canSkipNext,
+        canSkipPrevious = canSkipPrevious,
       )
     }
 
@@ -133,15 +188,12 @@ object MediaSessionReader {
       artist = artist,
       sourceLabel = appLabel(context, packageName),
       packageName = packageName,
-      isPlaying = state?.state.isActivelyPlaying(),
-      canPlayPause = actions.hasAny(
-        PlaybackState.ACTION_PLAY,
-        PlaybackState.ACTION_PAUSE,
-        PlaybackState.ACTION_PLAY_PAUSE,
-      ),
-      canSkipNext = actions.hasAny(PlaybackState.ACTION_SKIP_TO_NEXT),
-      canSkipPrevious = actions.hasAny(PlaybackState.ACTION_SKIP_TO_PREVIOUS),
-      artwork = metadata.artwork()?.scaledForWidget() ?: cached?.artwork,
+      isPlaying = isPlaying,
+      canPlayPause = canPlayPause,
+      canSkipNext = canSkipNext,
+      canSkipPrevious = canSkipPrevious,
+      artwork = metadata.artwork()?.scaledForWidget()
+        ?: cached?.takeIf { it.matchesTrack(packageName, title, artist) }?.artwork,
       positionMs = state?.currentPositionMs() ?: 0L,
       durationMs = metadata.durationMs(),
       lastPositionUpdateTimeMs = state?.lastPositionUpdateTime ?: 0L,
@@ -155,6 +207,14 @@ object MediaSessionReader {
 
   private fun Long.hasAny(vararg expectedActions: Long): Boolean {
     return expectedActions.any { action -> this and action != 0L }
+  }
+
+  private fun MediaPlaybackSnapshot.canDispatch(action: MediaControlAction): Boolean {
+    return when (action) {
+      MediaControlAction.TogglePlayPause -> canPlayPause
+      MediaControlAction.Next -> canSkipNext
+      MediaControlAction.Previous -> canSkipPrevious
+    }
   }
 
   private fun PlaybackState.currentPositionMs(): Long {
@@ -186,13 +246,21 @@ object MediaSessionReader {
   }
 
   private fun Bitmap.scaledForWidget(): Bitmap {
-    val maxSide = 256
+    val maxSide = 320
     val biggestSide = maxOf(width, height)
     if (biggestSide <= maxSide) return this
     val scale = maxSide.toFloat() / biggestSide.toFloat()
     val targetWidth = (width * scale).toInt().coerceAtLeast(1)
     val targetHeight = (height * scale).toInt().coerceAtLeast(1)
     return Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
+  }
+
+  private fun MediaPlaybackSnapshot.matchesTrack(
+    packageName: String,
+    title: String,
+    artist: String,
+  ): Boolean {
+    return this.packageName == packageName && this.title == title && this.artist == artist
   }
 
   private fun appLabel(context: Context, packageName: String): String {

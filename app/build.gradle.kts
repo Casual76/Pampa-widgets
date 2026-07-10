@@ -36,8 +36,8 @@ android {
     applicationId = "com.pampa.widgets"
     minSdk = 31
     targetSdk = 36
-    versionCode = 9
-    versionName = "0.2.7"
+    versionCode = 12
+    versionName = "0.3.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

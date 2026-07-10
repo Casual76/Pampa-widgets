@@ -9,15 +9,19 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.widget.RemoteViews
 import com.pampa.widgets.MainActivity
@@ -35,12 +39,50 @@ import com.pampa.widgets.core.settings.MediaWidgetTheme
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 
-/** Background render size (px) and corner radius for the widget card. */
-private const val CompanionBG_W = 640
-private const val CompanionBG_H = 470
-private const val CompanionBG_RADIUS = 56f
+/** Background render bounds used for launcher-size-specific bitmaps. */
+private const val BackgroundMinPx = 420
+private const val BackgroundMaxPx = 1400
+private const val CommandSettleDelayMs = 110L
+private const val CommandTimeoutMs = 1_600L
+private val CommandResyncDelaysMs = longArrayOf(220L, 600L, 1_100L)
+
+/** A command stays visually stable until the media session confirms its result. */
+private data class PendingMediaCommand(
+  val id: Long,
+  val action: MediaControlAction,
+  val baselineSnapshot: MediaPlaybackSnapshot,
+  val expectedPlaying: Boolean?,
+  val startedAtElapsedMs: Long,
+)
+
+/** The ephemeral state rendered while a command is in flight. */
+private data class MediaWidgetInteraction(
+  val action: MediaControlAction,
+  val showFeedback: Boolean,
+  val expectedPlaying: Boolean?,
+)
+
+/** State owned by this process so a RemoteViews [android.widget.ViewFlipper] can alternate layers. */
+private data class MediaWidgetVisualState(
+  val backgroundSignature: String,
+  val backgroundSlot: Int,
+  val artworkSignature: String,
+  val artworkSlot: Int,
+  val isPlaying: Boolean,
+)
+
+private data class MediaWidgetVisualPlan(
+  val initialize: Boolean,
+  val backgroundChanged: Boolean,
+  val targetBackgroundSlot: Int,
+  val artworkChanged: Boolean,
+  val targetArtworkSlot: Int,
+  val playbackChanged: Boolean,
+) {
+  val hasTransition: Boolean
+    get() = backgroundChanged || artworkChanged || playbackChanged
+}
 
 /**
  * Builds the RemoteViews for the Media Controls widget and drives the press feedback
@@ -51,52 +93,10 @@ private const val CompanionBG_RADIUS = 56f
  */
 object MediaWidgetUpdater {
   private val mainHandler = Handler(Looper.getMainLooper())
-
-  private const val ANIM_FRAME_MS = 48L
-  private const val PLAY_PAUSE_DURATION_MS = 180L
-  private const val SKIP_DURATION_MS = 150L
-
-  private var activeAnimAction: MediaControlAction? = null
-  private var animSnapshot: MediaPlaybackSnapshot? = null
-  private var animStartElapsed: Long = 0L
-  // Pre-computed once per run so feedback frames stay cheap.
-  private var animCachedStyle: MediaWidgetStyle? = null
-  private var animDonePosted = false
-
-  private fun runAnimationStep(context: Context) {
-    val action = activeAnimAction ?: return
-    val snapshot = animSnapshot ?: return
-    val settings = AppSettingsSnapshotReader.readBlocking(context)
-    val style = animCachedStyle ?: MediaWidgetStyle.from(context, snapshot.artwork, settings).also {
-      animCachedStyle = it
-    }
-
-    val now = SystemClock.elapsedRealtime()
-    val elapsed = (now - animStartElapsed).coerceAtLeast(0L)
-    val duration = if (action == MediaControlAction.TogglePlayPause) PLAY_PAUSE_DURATION_MS else SKIP_DURATION_MS
-    val progress = (elapsed.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-
-    val appWidgetManager = AppWidgetManager.getInstance(context)
-    val component = ComponentName(context, MediaWidgetProvider::class.java)
-    val widgetIds = appWidgetManager.getAppWidgetIds(component)
-
-    if (widgetIds.isNotEmpty()) {
-      val views = buildRemoteViews(context, snapshot, settings, style, action, progress)
-      widgetIds.forEach { widgetId ->
-        appWidgetManager.updateAppWidget(widgetId, views)
-      }
-    }
-
-    if (progress >= 1f) {
-      activeAnimAction = null
-      animSnapshot = null
-      animCachedStyle = null
-      animDonePosted = false
-      updateAll(context)
-    } else {
-      mainHandler.postDelayed({ runAnimationStep(context) }, ANIM_FRAME_MS)
-    }
-  }
+  private val stateLock = Any()
+  private var nextCommandId = 0L
+  private var pendingCommand: PendingMediaCommand? = null
+  private val visualStates = mutableMapOf<Int, MediaWidgetVisualState>()
 
   fun updateAll(context: Context) {
     val appContext = context.applicationContext
@@ -117,73 +117,156 @@ object MediaWidgetUpdater {
       context = context,
       keepLastSong = settings.mediaWidgetKeepLastSong,
     )
+    if (shouldHoldCurrentVisualState(snapshot)) return
     updateWithSnapshot(context, appWidgetManager, appWidgetIds, snapshot, settings)
   }
 
   fun feedbackSnapshot(context: Context, action: MediaControlAction): MediaPlaybackSnapshot? {
     val settings = AppSettingsSnapshotReader.readBlocking(context.applicationContext)
-    if (!settings.mediaWidgetInstantControls && !settings.mediaWidgetAnimatedFeedback) return null
     val snapshot = MediaSessionReader.readSnapshot(
       context = context.applicationContext,
       keepLastSong = settings.mediaWidgetKeepLastSong,
     )
-    if (snapshot.availability != MediaPlaybackAvailability.Active) return null
-    return if (settings.mediaWidgetInstantControls && action == MediaControlAction.TogglePlayPause) {
-      snapshot.copy(isPlaying = !snapshot.isPlaying)
-    } else {
-      snapshot
-    }
+    return snapshot.takeIf { it.canHandle(action) }
   }
 
   fun afterMediaControl(
     context: Context,
     action: MediaControlAction,
     feedbackSnapshot: MediaPlaybackSnapshot? = null,
+    commandDispatched: Boolean,
   ) {
     val appContext = context.applicationContext
     val settings = AppSettingsSnapshotReader.readBlocking(appContext)
+    val baseline = feedbackSnapshot ?: MediaSessionReader.readSnapshot(
+      context = appContext,
+      keepLastSong = settings.mediaWidgetKeepLastSong,
+    )
+    if (!commandDispatched || !baseline.canHandle(action)) {
+      updateAll(appContext)
+      return
+    }
 
-    if (settings.mediaWidgetAnimatedFeedback) {
-      animSnapshot = feedbackSnapshot ?: MediaSessionReader.readSnapshot(
-        context = appContext,
-        keepLastSong = settings.mediaWidgetKeepLastSong,
-      )
-      activeAnimAction = action
-      animStartElapsed = SystemClock.elapsedRealtime()
-      animCachedStyle = null
-      animDonePosted = false
-      runAnimationStep(appContext)
-    } else {
-      if (feedbackSnapshot != null && settings.mediaWidgetInstantControls) {
-        updateAllWithSnapshot(
-          context = appContext,
-          snapshot = feedbackSnapshot,
-          settings = settings,
-        )
+    val command = synchronized(stateLock) {
+      PendingMediaCommand(
+        id = ++nextCommandId,
+        action = action,
+        baselineSnapshot = baseline,
+        expectedPlaying = if (action == MediaControlAction.TogglePlayPause) !baseline.isPlaying else null,
+        startedAtElapsedMs = SystemClock.elapsedRealtime(),
+      ).also { pendingCommand = it }
+    }
+    val showFeedback = settings.mediaWidgetAnimatedFeedback || settings.mediaWidgetInstantControls
+    updateAllWithSnapshot(
+      context = appContext,
+      snapshot = baseline,
+      settings = settings,
+      interaction = MediaWidgetInteraction(
+        action = action,
+        showFeedback = showFeedback,
+        expectedPlaying = command.expectedPlaying,
+      ),
+    )
+    scheduleCommandResolution(appContext, command)
+  }
+
+  fun onDeleted(appWidgetIds: IntArray) {
+    synchronized(stateLock) {
+      appWidgetIds.forEach(visualStates::remove)
+    }
+  }
+
+  private fun shouldHoldCurrentVisualState(snapshot: MediaPlaybackSnapshot): Boolean {
+    val command = synchronized(stateLock) { pendingCommand } ?: return false
+    val elapsed = SystemClock.elapsedRealtime() - command.startedAtElapsedMs
+    val confirmed = snapshot.confirms(command)
+    return when {
+      confirmed || snapshot.availability == MediaPlaybackAvailability.PermissionRequired || elapsed >= CommandTimeoutMs -> {
+        clearPendingCommand(command.id)
+        false
       }
+      else -> true
     }
+  }
 
-    // Re-sync with the real session state after the media app has had time to react.
-    val delays = when (action) {
-      MediaControlAction.TogglePlayPause -> longArrayOf(360L, 900L)
-      MediaControlAction.Next,
-      MediaControlAction.Previous -> longArrayOf(420L, 900L, 1500L)
+  private fun scheduleCommandResolution(context: Context, command: PendingMediaCommand) {
+    mainHandler.postDelayed({ settlePressVisual(context, command.id) }, CommandSettleDelayMs)
+    CommandResyncDelaysMs.forEach { delayMs ->
+      mainHandler.postDelayed({
+        if (isCommandPending(command.id)) updateAll(context)
+      }, delayMs)
     }
-    delays.forEach { delayMs ->
-      mainHandler.postDelayed({ updateAll(appContext) }, delayMs)
+    mainHandler.postDelayed({
+      if (clearPendingCommand(command.id)) updateAll(context)
+    }, CommandTimeoutMs)
+  }
+
+  private fun settlePressVisual(context: Context, commandId: Long) {
+    val command = synchronized(stateLock) { pendingCommand }?.takeIf { it.id == commandId } ?: return
+    val appWidgetManager = AppWidgetManager.getInstance(context)
+    val component = ComponentName(context, MediaWidgetProvider::class.java)
+    val widgetIds = appWidgetManager.getAppWidgetIds(component)
+    widgetIds.forEach { widgetId ->
+      val partialViews = RemoteViews(context.packageName, R.layout.widget_media_controls)
+      when (command.action) {
+        MediaControlAction.TogglePlayPause -> partialViews.setScale(R.id.media_widget_play_pause_container, 1f)
+        MediaControlAction.Next -> partialViews.setScale(R.id.media_widget_next, 1f)
+        MediaControlAction.Previous -> partialViews.setScale(R.id.media_widget_previous, 1f)
+      }
+      appWidgetManager.partiallyUpdateAppWidget(widgetId, partialViews)
     }
+  }
+
+  private fun isCommandPending(commandId: Long): Boolean =
+    synchronized(stateLock) { pendingCommand?.id == commandId }
+
+  private fun clearPendingCommand(commandId: Long): Boolean = synchronized(stateLock) {
+    if (pendingCommand?.id != commandId) return@synchronized false
+    pendingCommand = null
+    true
+  }
+
+  internal fun buildRemoteViewsForTest(
+    context: Context,
+    snapshot: MediaPlaybackSnapshot,
+    settings: AppSettings,
+    widthDp: Int,
+    heightDp: Int,
+  ): RemoteViews {
+    val layout = MediaWidgetLayoutSpec.fromDimensions(
+      widthDp = widthDp,
+      heightDp = heightDp,
+      settings = settings,
+    )
+    val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout)
+    return buildRemoteViews(
+      context = context,
+      snapshot = snapshot,
+      settings = settings,
+      style = style,
+      layout = layout,
+      visualPlan = MediaWidgetVisualPlan(
+        initialize = true,
+        backgroundChanged = false,
+        targetBackgroundSlot = 0,
+        artworkChanged = false,
+        targetArtworkSlot = 0,
+        playbackChanged = false,
+      ),
+      interaction = null,
+    )
   }
 
   private fun updateAllWithSnapshot(
     context: Context,
     snapshot: MediaPlaybackSnapshot,
     settings: AppSettings,
-    feedbackAction: MediaControlAction? = null,
+    interaction: MediaWidgetInteraction? = null,
   ) {
     val appWidgetManager = AppWidgetManager.getInstance(context)
     val component = ComponentName(context, MediaWidgetProvider::class.java)
     val widgetIds = appWidgetManager.getAppWidgetIds(component)
-    updateWithSnapshot(context, appWidgetManager, widgetIds, snapshot, settings, feedbackAction)
+    updateWithSnapshot(context, appWidgetManager, widgetIds, snapshot, settings, interaction)
   }
 
   private fun updateWithSnapshot(
@@ -192,13 +275,104 @@ object MediaWidgetUpdater {
     appWidgetIds: IntArray,
     snapshot: MediaPlaybackSnapshot,
     settings: AppSettings,
-    feedbackAction: MediaControlAction? = null,
+    interaction: MediaWidgetInteraction? = null,
   ) {
     if (appWidgetIds.isEmpty()) return
-    val style = MediaWidgetStyle.from(context, snapshot.artwork, settings)
-    val views = buildRemoteViews(context, snapshot, settings, style, feedbackAction, 0f)
     appWidgetIds.forEach { widgetId ->
+      val layout = MediaWidgetLayoutSpec.from(appWidgetManager.getAppWidgetOptions(widgetId), settings)
+      val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout)
+      val visualPlan = visualPlanFor(widgetId, snapshot, style)
+      val views = buildRemoteViews(context, snapshot, settings, style, layout, visualPlan, interaction)
       appWidgetManager.updateAppWidget(widgetId, views)
+      if (visualPlan.hasTransition) {
+        applyVisualTransition(context, appWidgetManager, widgetId, snapshot, style, layout, visualPlan)
+      }
+      commitVisualState(widgetId, snapshot, style, visualPlan)
+    }
+  }
+
+  private fun visualPlanFor(
+    widgetId: Int,
+    snapshot: MediaPlaybackSnapshot,
+    style: MediaWidgetStyle,
+  ): MediaWidgetVisualPlan {
+    val previous = synchronized(stateLock) { visualStates[widgetId] }
+    if (previous == null) {
+      return MediaWidgetVisualPlan(
+        initialize = true,
+        backgroundChanged = false,
+        targetBackgroundSlot = 0,
+        artworkChanged = false,
+        targetArtworkSlot = 0,
+        playbackChanged = false,
+      )
+    }
+    val backgroundChanged = previous.backgroundSignature != style.backgroundSignature
+    val artworkChanged = previous.artworkSignature != snapshot.artworkSignature()
+    return MediaWidgetVisualPlan(
+      initialize = false,
+      backgroundChanged = backgroundChanged,
+      targetBackgroundSlot = if (backgroundChanged) 1 - previous.backgroundSlot else previous.backgroundSlot,
+      artworkChanged = artworkChanged,
+      targetArtworkSlot = if (artworkChanged) 1 - previous.artworkSlot else previous.artworkSlot,
+      playbackChanged = previous.isPlaying != snapshot.isPlaying,
+    )
+  }
+
+  private fun applyVisualTransition(
+    context: Context,
+    appWidgetManager: AppWidgetManager,
+    widgetId: Int,
+    snapshot: MediaPlaybackSnapshot,
+    style: MediaWidgetStyle,
+    layout: MediaWidgetLayoutSpec,
+    visualPlan: MediaWidgetVisualPlan,
+  ) {
+    val views = RemoteViews(context.packageName, R.layout.widget_media_controls)
+    if (visualPlan.backgroundChanged) {
+      views.setImageViewBitmap(
+        if (visualPlan.targetBackgroundSlot == 0) R.id.media_widget_background else R.id.media_widget_background_next,
+        style.background,
+      )
+      views.setDisplayedChild(R.id.media_widget_background_flipper, visualPlan.targetBackgroundSlot)
+    }
+    if (visualPlan.artworkChanged) {
+      applyArtworkImage(
+        context = context,
+        views = views,
+        imageViewId = if (visualPlan.targetArtworkSlot == 0) {
+          R.id.media_widget_artwork
+        } else {
+          R.id.media_widget_artwork_next
+        },
+        snapshot = snapshot,
+        layout = layout,
+      )
+      views.setDisplayedChild(R.id.media_widget_artwork_flipper, visualPlan.targetArtworkSlot)
+    }
+    if (visualPlan.playbackChanged) {
+      views.setDisplayedChild(
+        R.id.media_widget_play_pause_glyph_flipper,
+        if (snapshot.isPlaying) 1 else 0,
+      )
+    }
+    appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
+  }
+
+  private fun commitVisualState(
+    widgetId: Int,
+    snapshot: MediaPlaybackSnapshot,
+    style: MediaWidgetStyle,
+    visualPlan: MediaWidgetVisualPlan,
+  ) {
+    synchronized(stateLock) {
+      visualStates[widgetId] = MediaWidgetVisualState(
+        backgroundSignature = style.backgroundSignature,
+        backgroundSlot = visualPlan.targetBackgroundSlot,
+        artworkSignature = snapshot.artworkSignature(),
+        artworkSlot = visualPlan.targetArtworkSlot,
+        isPlaying = snapshot.isPlaying,
+      )
     }
   }
 
@@ -207,19 +381,25 @@ object MediaWidgetUpdater {
     snapshot: MediaPlaybackSnapshot,
     settings: AppSettings,
     style: MediaWidgetStyle,
-    feedbackAction: MediaControlAction?,
-    animProgress: Float,
+    layout: MediaWidgetLayoutSpec,
+    visualPlan: MediaWidgetVisualPlan,
+    interaction: MediaWidgetInteraction?,
   ): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_media_controls)
 
-    views.setImageViewBitmap(R.id.media_widget_background, style.background)
+    applyBackgroundBaseline(views, style, visualPlan)
+    applyLayout(context, views, style, layout)
     views.setTextViewText(R.id.media_widget_source, snapshot.sourceLabel)
     views.setTextViewText(R.id.media_widget_title, snapshot.title)
     views.setTextViewText(R.id.media_widget_artist, snapshot.artist)
+    views.setTextViewText(R.id.media_widget_status, interaction?.statusLabel() ?: snapshot.statusLabel())
+    views.setTextViewText(R.id.media_widget_time, snapshot.timeLabel())
     views.setTextColor(R.id.media_widget_source, style.primaryTextColor)
     views.setTextColor(R.id.media_widget_title, style.primaryTextColor)
     views.setTextColor(R.id.media_widget_artist, style.secondaryTextColor)
     views.setTextColor(R.id.media_widget_permission, style.secondaryTextColor)
+    views.setTextColor(R.id.media_widget_status, style.secondaryTextColor)
+    views.setTextColor(R.id.media_widget_time, style.secondaryTextColor)
     views.setColorStateList(
       R.id.media_widget_source,
       "setBackgroundTintList",
@@ -231,21 +411,29 @@ object MediaWidgetUpdater {
       ColorStateList.valueOf(style.artworkFrameColor),
     )
     views.setViewVisibility(
+      R.id.media_widget_text_stack,
+      if (layout.showText) View.VISIBLE else View.GONE,
+    )
+    views.setViewVisibility(
       R.id.media_widget_source,
-      if (settings.mediaWidgetShowSource) View.VISIBLE else View.GONE,
+      if (layout.showText && layout.showSource && settings.mediaWidgetShowSource) View.VISIBLE else View.GONE,
     )
     views.setViewVisibility(
       R.id.media_widget_artist,
-      if (settings.mediaWidgetShowArtist) View.VISIBLE else View.GONE,
+      if (layout.showText && layout.showArtist && settings.mediaWidgetShowArtist) View.VISIBLE else View.GONE,
     )
     views.setViewVisibility(
       R.id.media_widget_permission,
-      if (snapshot.availability == MediaPlaybackAvailability.PermissionRequired) View.VISIBLE else View.GONE,
+      if (layout.showText && snapshot.availability == MediaPlaybackAvailability.PermissionRequired) {
+        View.VISIBLE
+      } else {
+        View.GONE
+      },
     )
 
-    applyArtwork(context, views, snapshot, settings)
-    applyControls(context, views, snapshot, style, settings, feedbackAction, animProgress)
-    applyProgress(views, snapshot, style)
+    applyArtwork(context, views, snapshot, layout, visualPlan)
+    applyControls(context, views, snapshot, style, layout, visualPlan, interaction)
+    applyProgress(views, snapshot, style, layout)
 
     val playIntent = if (snapshot.availability == MediaPlaybackAvailability.PermissionRequired) {
       settingsPendingIntent(context)
@@ -253,6 +441,7 @@ object MediaWidgetUpdater {
       broadcastPendingIntent(context, MediaWidgetProvider.ActionTogglePlayPause, 1)
     }
     views.setOnClickPendingIntent(R.id.media_widget_play_pause, playIntent)
+    views.setOnClickPendingIntent(R.id.media_widget_play_pause_container, playIntent)
     views.setOnClickPendingIntent(R.id.media_widget_permission, settingsPendingIntent(context))
     val openMediaIntent = openMediaAppPendingIntent(context, snapshot)
     views.setOnClickPendingIntent(R.id.media_widget_root, openMediaIntent)
@@ -267,31 +456,122 @@ object MediaWidgetUpdater {
       R.id.media_widget_next,
       broadcastPendingIntent(context, MediaWidgetProvider.ActionNext, 3),
     )
+    views.setOnClickPendingIntent(
+      R.id.media_widget_refresh,
+      broadcastPendingIntent(context, MediaWidgetProvider.ActionRefresh, 4),
+    )
+    views.setOnClickPendingIntent(R.id.media_widget_open_media, openMediaIntent)
+    views.setOnClickPendingIntent(R.id.media_widget_open_pampa, mainActivityPendingIntent(context))
 
     return views
+  }
+
+  private fun applyBackgroundBaseline(
+    views: RemoteViews,
+    style: MediaWidgetStyle,
+    visualPlan: MediaWidgetVisualPlan,
+  ) {
+    if (!visualPlan.initialize) return
+    views.setImageViewBitmap(R.id.media_widget_background, style.background)
+    views.setImageViewBitmap(R.id.media_widget_background_next, style.background)
+    views.setDisplayedChild(R.id.media_widget_background_flipper, 0)
+  }
+
+  private fun applyLayout(
+    context: Context,
+    views: RemoteViews,
+    style: MediaWidgetStyle,
+    layout: MediaWidgetLayoutSpec,
+  ) {
+    views.setViewPadding(
+      R.id.media_widget_content,
+      context.dp(layout.contentPaddingHorizontalDp),
+      context.dp(layout.contentPaddingVerticalDp),
+      context.dp(layout.contentPaddingHorizontalDp),
+      context.dp(layout.contentPaddingVerticalDp),
+    )
+    views.setInt(R.id.media_widget_track_row, "setGravity", layout.trackGravity)
+    views.setViewLayoutHeight(
+      R.id.media_widget_controls,
+      layout.controlsRowHeightDp.toFloat(),
+      TypedValue.COMPLEX_UNIT_DIP,
+    )
+    views.setViewLayoutHeight(
+      R.id.media_widget_extra_actions,
+      layout.extraRowHeightDp.toFloat(),
+      TypedValue.COMPLEX_UNIT_DIP,
+    )
+    views.setViewLayoutHeight(
+      R.id.media_widget_source,
+      layout.sourcePillHeightDp,
+      TypedValue.COMPLEX_UNIT_DIP,
+    )
+    views.setTextViewTextSize(R.id.media_widget_source, TypedValue.COMPLEX_UNIT_SP, layout.sourceSp)
+    views.setTextViewTextSize(R.id.media_widget_title, TypedValue.COMPLEX_UNIT_SP, layout.titleSp)
+    views.setTextViewTextSize(R.id.media_widget_artist, TypedValue.COMPLEX_UNIT_SP, layout.artistSp)
+    views.setTextViewTextSize(R.id.media_widget_permission, TypedValue.COMPLEX_UNIT_SP, layout.permissionSp)
+    views.setTextViewTextSize(R.id.media_widget_status, TypedValue.COMPLEX_UNIT_SP, layout.metaSp)
+    views.setTextViewTextSize(R.id.media_widget_time, TypedValue.COMPLEX_UNIT_SP, layout.metaSp)
+    views.setInt(R.id.media_widget_title, "setMaxLines", layout.titleMaxLines)
+    views.setViewVisibility(R.id.media_widget_meta_row, if (layout.showMeta) View.VISIBLE else View.GONE)
+    views.setViewVisibility(
+      R.id.media_widget_extra_actions,
+      if (layout.showExtraActions) View.VISIBLE else View.GONE,
+    )
+    views.setColorStateList(
+      R.id.media_widget_refresh,
+      "setBackgroundTintList",
+      ColorStateList.valueOf(style.controlSurfaceColor),
+    )
+    views.setColorStateList(
+      R.id.media_widget_open_media,
+      "setBackgroundTintList",
+      ColorStateList.valueOf(style.controlSurfaceColor),
+    )
+    views.setColorStateList(
+      R.id.media_widget_open_pampa,
+      "setBackgroundTintList",
+      ColorStateList.valueOf(style.controlSurfaceColor),
+    )
   }
 
   private fun applyArtwork(
     context: Context,
     views: RemoteViews,
     snapshot: MediaPlaybackSnapshot,
-    settings: AppSettings,
+    layout: MediaWidgetLayoutSpec,
+    visualPlan: MediaWidgetVisualPlan,
   ) {
-    val artworkDp = when (settings.mediaWidgetArtworkSize) {
-      MediaWidgetArtworkSize.Compact -> 88f
-      MediaWidgetArtworkSize.Balanced -> 100f
-      MediaWidgetArtworkSize.Large -> 112f
-    }
+    val artworkDp = layout.artworkDp
     views.setViewLayoutWidth(R.id.media_widget_artwork_frame, artworkDp, TypedValue.COMPLEX_UNIT_DIP)
     views.setViewLayoutHeight(R.id.media_widget_artwork_frame, artworkDp, TypedValue.COMPLEX_UNIT_DIP)
+    // Load the current artwork into the slot that will be displayed after this update.
+    // The other slot is left with its previous content so the flipper crossfade looks correct.
+    // On initialize, both slots are primed to avoid showing an empty view briefly.
+    val primarySlot = if (visualPlan.initialize) R.id.media_widget_artwork else {
+      if (visualPlan.targetArtworkSlot == 0) R.id.media_widget_artwork else R.id.media_widget_artwork_next
+    }
+    applyArtworkImage(context, views, primarySlot, snapshot, layout)
+    if (visualPlan.initialize) {
+      applyArtworkImage(context, views, R.id.media_widget_artwork_next, snapshot, layout)
+      views.setDisplayedChild(R.id.media_widget_artwork_flipper, 0)
+    }
+  }
 
+  private fun applyArtworkImage(
+    context: Context,
+    views: RemoteViews,
+    imageViewId: Int,
+    snapshot: MediaPlaybackSnapshot,
+    layout: MediaWidgetLayoutSpec,
+  ) {
     if (snapshot.artwork != null) {
-      views.setViewPadding(R.id.media_widget_artwork, 0, 0, 0, 0)
-      views.setImageViewBitmap(R.id.media_widget_artwork, snapshot.artwork.roundedSquare())
+      views.setViewPadding(imageViewId, 0, 0, 0, 0)
+      views.setImageViewBitmap(imageViewId, snapshot.artwork.roundedSquare())
     } else {
-      val padding = context.dp(18)
-      views.setViewPadding(R.id.media_widget_artwork, padding, padding, padding, padding)
-      views.setImageViewResource(R.id.media_widget_artwork, R.drawable.ic_widget_music_note)
+      val padding = context.dp((layout.artworkDp * 0.18f).toInt().coerceAtLeast(10))
+      views.setViewPadding(imageViewId, padding, padding, padding, padding)
+      views.setImageViewResource(imageViewId, R.drawable.ic_widget_music_note)
     }
   }
 
@@ -300,85 +580,128 @@ object MediaWidgetUpdater {
     views: RemoteViews,
     snapshot: MediaPlaybackSnapshot,
     style: MediaWidgetStyle,
-    settings: AppSettings,
-    action: MediaControlAction?,
-    progress: Float,
+    layout: MediaWidgetLayoutSpec,
+    visualPlan: MediaWidgetVisualPlan,
+    interaction: MediaWidgetInteraction?,
   ) {
-    val animatingPlayPause = action == MediaControlAction.TogglePlayPause
-    val animatingNext = action == MediaControlAction.Next
-    val animatingPrev = action == MediaControlAction.Previous
-
-    // When instant controls are on we already flipped isPlaying in the feedback snapshot,
-    // so "target" is what the glyph should settle on.
-    val targetPlaying = if (settings.mediaWidgetInstantControls) snapshot.isPlaying else snapshot.isPlaying
+    val playEnabled = snapshot.canPlayPause || snapshot.availability == MediaPlaybackAvailability.PermissionRequired
+    val commandAction = interaction?.action
+    val showFeedback = interaction?.showFeedback == true
+    val controlsLocked = interaction != null
+    val sidePadding = context.dp(((layout.sideButtonDp - layout.sideIconDp) / 2).coerceAtLeast(4))
+    val playPadding = context.dp(((layout.playButtonDp - layout.playIconDp) / 2).coerceAtLeast(4))
+    val extraPadding = context.dp(((layout.extraButtonDp - layout.extraIconDp) / 2).coerceAtLeast(4))
 
     views.setViewPadding(R.id.media_widget_play_pause, 0, 0, 0, 0)
-    views.setViewPadding(R.id.media_widget_previous, 0, 0, 0, 0)
-    views.setViewPadding(R.id.media_widget_next, 0, 0, 0, 0)
+    views.setViewPadding(R.id.media_widget_previous, sidePadding, sidePadding, sidePadding, sidePadding)
+    views.setViewPadding(R.id.media_widget_next, sidePadding, sidePadding, sidePadding, sidePadding)
+    views.setViewPadding(R.id.media_widget_refresh, extraPadding, extraPadding, extraPadding, extraPadding)
+    views.setViewPadding(R.id.media_widget_open_media, extraPadding, extraPadding, extraPadding, extraPadding)
+    views.setViewPadding(R.id.media_widget_open_pampa, extraPadding, extraPadding, extraPadding, extraPadding)
+    views.setViewPadding(R.id.media_widget_play_glyph, playPadding, playPadding, playPadding, playPadding)
+    views.setViewPadding(R.id.media_widget_pause_glyph, playPadding, playPadding, playPadding, playPadding)
+
+    views.setSquareDp(R.id.media_widget_previous, layout.sideButtonDp)
+    views.setSquareDp(R.id.media_widget_next, layout.sideButtonDp)
+    views.setSquareDp(R.id.media_widget_play_pause_container, layout.playButtonDp)
+    views.setSquareDp(R.id.media_widget_play_pause, layout.playButtonDp)
+    views.setSquareDp(R.id.media_widget_play_pause_glyph_flipper, layout.playButtonDp)
+    views.setSquareDp(R.id.media_widget_command_pending, minOf(30, layout.playIconDp + 6))
+    views.setSquareDp(R.id.media_widget_refresh, layout.extraButtonDp)
+    views.setSquareDp(R.id.media_widget_open_media, layout.extraButtonDp)
+    views.setSquareDp(R.id.media_widget_open_pampa, layout.extraButtonDp)
+    views.setViewVisibility(R.id.media_widget_previous, if (layout.showSideControls) View.VISIBLE else View.GONE)
+    views.setViewVisibility(R.id.media_widget_next, if (layout.showSideControls) View.VISIBLE else View.GONE)
 
     views.setColorStateList(
       R.id.media_widget_previous,
       "setBackgroundTintList",
-      ColorStateList.valueOf(style.controlSurfaceColor),
+      ColorStateList.valueOf(
+        if (snapshot.canSkipPrevious) style.controlSurfaceColor else style.disabledControlSurfaceColor,
+      ),
     )
     views.setColorStateList(
       R.id.media_widget_next,
       "setBackgroundTintList",
-      ColorStateList.valueOf(style.controlSurfaceColor),
+      ColorStateList.valueOf(
+        if (snapshot.canSkipNext) style.controlSurfaceColor else style.disabledControlSurfaceColor,
+      ),
     )
     views.setColorStateList(
       R.id.media_widget_play_pause,
       "setBackgroundTintList",
-      ColorStateList.valueOf(style.playSurfaceColor),
+      ColorStateList.valueOf(if (playEnabled) style.playSurfaceColor else style.disabledControlSurfaceColor),
     )
-
-    val playPauseBitmap = drawGlyph(
-      context = context,
-      drawableId = if (targetPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play,
-      canvasSizeDp = 54,
-      iconSizeDp = 28,
-      color = style.playIconColor,
-      scale = if (animatingPlayPause) gentlePressScale(progress) else 1f,
+    views.setImageViewResource(R.id.media_widget_previous, R.drawable.ic_widget_previous)
+    views.setImageViewResource(R.id.media_widget_next, R.drawable.ic_widget_next)
+    views.setImageViewResource(R.id.media_widget_refresh, R.drawable.ic_widget_refresh)
+    views.setImageViewResource(R.id.media_widget_open_media, R.drawable.ic_widget_open_app)
+    views.setImageViewResource(R.id.media_widget_open_pampa, R.drawable.ic_widget_settings)
+    views.setColorStateList(
+      R.id.media_widget_previous,
+      "setImageTintList",
+      ColorStateList.valueOf(if (snapshot.canSkipPrevious) style.controlIconColor else style.disabledControlIconColor),
     )
-    views.setImageViewBitmap(R.id.media_widget_play_pause, playPauseBitmap)
-
-    val nextBitmap = drawGlyph(
-      context = context,
-      drawableId = R.drawable.ic_widget_next,
-      canvasSizeDp = 42,
-      iconSizeDp = 23,
-      color = style.controlIconColor,
-      scale = if (animatingNext) gentlePressScale(progress) else 1f,
+    views.setColorStateList(
+      R.id.media_widget_next,
+      "setImageTintList",
+      ColorStateList.valueOf(if (snapshot.canSkipNext) style.controlIconColor else style.disabledControlIconColor),
     )
-    views.setImageViewBitmap(R.id.media_widget_next, nextBitmap)
-
-    val prevBitmap = drawGlyph(
-      context = context,
-      drawableId = R.drawable.ic_widget_previous,
-      canvasSizeDp = 42,
-      iconSizeDp = 23,
-      color = style.controlIconColor,
-      scale = if (animatingPrev) gentlePressScale(progress) else 1f,
+    listOf(R.id.media_widget_play_glyph, R.id.media_widget_pause_glyph).forEach { glyphId ->
+      views.setColorStateList(
+        glyphId,
+        "setImageTintList",
+        ColorStateList.valueOf(if (playEnabled) style.playIconColor else style.disabledControlIconColor),
+      )
+    }
+    listOf(R.id.media_widget_refresh, R.id.media_widget_open_media, R.id.media_widget_open_pampa).forEach { iconId ->
+      views.setColorStateList(iconId, "setImageTintList", ColorStateList.valueOf(style.controlIconColor))
+    }
+    views.setColorStateList(
+      R.id.media_widget_command_pending,
+      "setIndeterminateTintList",
+      ColorStateList.valueOf(style.playIconColor),
     )
-    views.setImageViewBitmap(R.id.media_widget_previous, prevBitmap)
+    if (visualPlan.initialize) {
+      views.setDisplayedChild(R.id.media_widget_play_pause_glyph_flipper, if (snapshot.isPlaying) 1 else 0)
+    }
 
-    views.setBoolean(R.id.media_widget_previous, "setEnabled", snapshot.canSkipPrevious)
-    views.setBoolean(R.id.media_widget_next, "setEnabled", snapshot.canSkipNext)
-    views.setBoolean(R.id.media_widget_play_pause, "setEnabled", snapshot.canPlayPause)
-    views.setFloat(R.id.media_widget_previous, "setAlpha", if (snapshot.canSkipPrevious) 1f else 0.35f)
-    views.setFloat(R.id.media_widget_next, "setAlpha", if (snapshot.canSkipNext) 1f else 0.35f)
-    views.setFloat(R.id.media_widget_play_pause, "setAlpha", if (snapshot.canPlayPause) 1f else 0.55f)
+    val isTogglePending = commandAction == MediaControlAction.TogglePlayPause && showFeedback
+    val isNextPending = commandAction == MediaControlAction.Next && showFeedback
+    val isPreviousPending = commandAction == MediaControlAction.Previous && showFeedback
+    views.setViewVisibility(
+      R.id.media_widget_command_pending,
+      if (isTogglePending) View.VISIBLE else View.GONE,
+    )
+    views.setFloat(R.id.media_widget_play_pause_glyph_flipper, "setAlpha", if (isTogglePending) 0.16f else 1f)
+    views.setScale(R.id.media_widget_play_pause_container, if (isTogglePending) 0.93f else 1f)
+    views.setScale(R.id.media_widget_next, if (isNextPending) 0.91f else 1f)
+    views.setScale(R.id.media_widget_previous, if (isPreviousPending) 0.91f else 1f)
+
+    views.setBoolean(R.id.media_widget_previous, "setEnabled", snapshot.canSkipPrevious && !controlsLocked)
+    views.setBoolean(R.id.media_widget_next, "setEnabled", snapshot.canSkipNext && !controlsLocked)
+    views.setBoolean(R.id.media_widget_play_pause, "setEnabled", playEnabled && !controlsLocked)
   }
 
   private fun applyProgress(
     views: RemoteViews,
     snapshot: MediaPlaybackSnapshot,
     style: MediaWidgetStyle,
+    layout: MediaWidgetLayoutSpec,
   ) {
     val progress = snapshot.progressPermille()
+    views.setViewLayoutHeight(
+      R.id.media_widget_progress,
+      layout.progressHeightDp,
+      TypedValue.COMPLEX_UNIT_DIP,
+    )
     views.setViewVisibility(
       R.id.media_widget_progress,
-      if (progress > 0) View.VISIBLE else View.INVISIBLE,
+      when {
+        !layout.showProgress -> View.GONE
+        progress > 0 -> View.VISIBLE
+        else -> View.INVISIBLE
+      },
     )
     views.setColorStateList(
       R.id.media_widget_progress,
@@ -412,6 +735,16 @@ object MediaWidgetUpdater {
       context,
       20,
       NotificationListenerAccess.settingsIntent(),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+  }
+
+  private fun mainActivityPendingIntent(context: Context): PendingIntent {
+    val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    return PendingIntent.getActivity(
+      context,
+      21,
+      intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
   }
@@ -451,13 +784,212 @@ private fun MediaPlaybackSnapshot.launchPackageName(): String {
   }
 }
 
+internal enum class MediaWidgetSizeClass {
+  Mini,
+  Compact,
+  Standard,
+  Expanded,
+  Full,
+}
+
+internal data class MediaWidgetLayoutSpec(
+  val widthDp: Int,
+  val heightDp: Int,
+  val sizeClass: MediaWidgetSizeClass,
+  val contentPaddingHorizontalDp: Int,
+  val contentPaddingVerticalDp: Int,
+  val trackGravity: Int,
+  val artworkDp: Float,
+  val showText: Boolean,
+  val showSource: Boolean,
+  val showArtist: Boolean,
+  val showProgress: Boolean,
+  val showMeta: Boolean,
+  val showExtraActions: Boolean,
+  val showSideControls: Boolean,
+  val titleMaxLines: Int,
+  val sourcePillHeightDp: Float,
+  val sourceSp: Float,
+  val titleSp: Float,
+  val artistSp: Float,
+  val permissionSp: Float,
+  val metaSp: Float,
+  val controlsRowHeightDp: Int,
+  val playButtonDp: Int,
+  val sideButtonDp: Int,
+  val playIconDp: Int,
+  val sideIconDp: Int,
+  val extraRowHeightDp: Int,
+  val extraButtonDp: Int,
+  val extraIconDp: Int,
+  val progressHeightDp: Float,
+) {
+  companion object {
+    fun from(options: Bundle?, settings: AppSettings): MediaWidgetLayoutSpec {
+      val minWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) ?: 0
+      val minHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) ?: 0
+      val maxWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH) ?: 0
+      val maxHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT) ?: 0
+      val widthDp = (if (minWidth > 0) minWidth else maxWidth.takeIf { it > 0 } ?: 250)
+        .coerceAtLeast(96)
+      val heightDp = (if (minHeight > 0) minHeight else maxHeight.takeIf { it > 0 } ?: 170)
+        .coerceAtLeast(96)
+      return fromDimensions(widthDp = widthDp, heightDp = heightDp, settings = settings)
+    }
+
+    fun fromDimensions(
+      widthDp: Int,
+      heightDp: Int,
+      settings: AppSettings,
+    ): MediaWidgetLayoutSpec {
+      val sizeClass = when {
+        widthDp < 185 || heightDp < 150 -> MediaWidgetSizeClass.Mini
+        widthDp < 250 || heightDp < 185 -> MediaWidgetSizeClass.Compact
+        heightDp >= 420 || (widthDp >= 430 && heightDp >= 320) -> MediaWidgetSizeClass.Full
+        widthDp >= 340 || heightDp >= 260 -> MediaWidgetSizeClass.Expanded
+        else -> MediaWidgetSizeClass.Standard
+      }
+
+      val horizontalPadding = when (sizeClass) {
+        MediaWidgetSizeClass.Mini -> 10
+        MediaWidgetSizeClass.Compact -> 12
+        MediaWidgetSizeClass.Standard -> 16
+        MediaWidgetSizeClass.Expanded -> 20
+        MediaWidgetSizeClass.Full -> 24
+      }
+      val verticalPadding = when (sizeClass) {
+        MediaWidgetSizeClass.Mini -> 9
+        MediaWidgetSizeClass.Compact -> 12
+        MediaWidgetSizeClass.Standard -> 15
+        MediaWidgetSizeClass.Expanded -> 20
+        MediaWidgetSizeClass.Full -> 24
+      }
+      val showText = widthDp >= 170 && heightDp >= 135
+      val showProgress = sizeClass != MediaWidgetSizeClass.Mini && heightDp >= 164
+      val showMeta = sizeClass in setOf(MediaWidgetSizeClass.Expanded, MediaWidgetSizeClass.Full) && heightDp >= 280
+      val showExtraActions = sizeClass in setOf(MediaWidgetSizeClass.Expanded, MediaWidgetSizeClass.Full) &&
+        (heightDp >= 320 || (widthDp >= 460 && heightDp >= 260))
+      val showSideControls = widthDp >= 176 && heightDp >= 118
+      val playButton = when (sizeClass) {
+        MediaWidgetSizeClass.Mini -> 44
+        MediaWidgetSizeClass.Compact -> 50
+        MediaWidgetSizeClass.Standard -> 54
+        MediaWidgetSizeClass.Expanded -> 60
+        MediaWidgetSizeClass.Full -> 68
+      }
+      val sideButton = when (sizeClass) {
+        MediaWidgetSizeClass.Mini -> 36
+        MediaWidgetSizeClass.Compact -> 40
+        MediaWidgetSizeClass.Standard -> 42
+        MediaWidgetSizeClass.Expanded -> 46
+        MediaWidgetSizeClass.Full -> 50
+      }
+      val controlsRowHeight = max(playButton, sideButton)
+      val extraRowHeight = if (showExtraActions) {
+        when (sizeClass) {
+          MediaWidgetSizeClass.Full -> 52
+          else -> 46
+        }
+      } else {
+        1
+      }
+      val progressBlock = if (showProgress) 22 else 0
+      val metaBlock = if (showMeta) 30 else 0
+      val extraBlock = if (showExtraActions) extraRowHeight + 10 else 0
+      val availableTrackHeight = (
+        heightDp - verticalPadding * 2 - controlsRowHeight - progressBlock - metaBlock - extraBlock
+        ).coerceAtLeast(48)
+      val desiredArtwork = when (settings.mediaWidgetArtworkSize) {
+        MediaWidgetArtworkSize.Compact -> 82
+        MediaWidgetArtworkSize.Balanced -> 98
+        MediaWidgetArtworkSize.Large -> 112
+      } + when (sizeClass) {
+        MediaWidgetSizeClass.Mini -> -24
+        MediaWidgetSizeClass.Compact -> -12
+        MediaWidgetSizeClass.Standard -> 0
+        MediaWidgetSizeClass.Expanded -> 30
+        MediaWidgetSizeClass.Full -> 128
+      }
+      val widthArtworkLimit = if (showText) {
+        (widthDp * if (sizeClass == MediaWidgetSizeClass.Full) 0.46f else 0.42f).toInt()
+      } else {
+        widthDp - horizontalPadding * 2
+      }.coerceAtLeast(48)
+      val artwork = minOf(desiredArtwork, availableTrackHeight, widthArtworkLimit)
+        .coerceAtLeast(if (sizeClass == MediaWidgetSizeClass.Mini) 48 else 58)
+        .toFloat()
+
+      return MediaWidgetLayoutSpec(
+        widthDp = widthDp,
+        heightDp = heightDp,
+        sizeClass = sizeClass,
+        contentPaddingHorizontalDp = horizontalPadding,
+        contentPaddingVerticalDp = verticalPadding,
+        trackGravity = if (showText) Gravity.CENTER_VERTICAL or Gravity.START else Gravity.CENTER,
+        artworkDp = artwork,
+        showText = showText,
+        showSource = sizeClass != MediaWidgetSizeClass.Mini && heightDp >= 160,
+        showArtist = sizeClass !in setOf(MediaWidgetSizeClass.Mini, MediaWidgetSizeClass.Compact) || heightDp >= 176,
+        showProgress = showProgress,
+        showMeta = showMeta,
+        showExtraActions = showExtraActions,
+        showSideControls = showSideControls,
+        titleMaxLines = when (sizeClass) {
+          MediaWidgetSizeClass.Full -> 3
+          MediaWidgetSizeClass.Expanded -> 2
+          MediaWidgetSizeClass.Standard -> 2
+          else -> 1
+        },
+        sourcePillHeightDp = if (sizeClass == MediaWidgetSizeClass.Full) 24f else 20f,
+        sourceSp = if (sizeClass == MediaWidgetSizeClass.Full) 11.5f else 10f,
+        titleSp = when (sizeClass) {
+          MediaWidgetSizeClass.Mini -> 13f
+          MediaWidgetSizeClass.Compact -> 15f
+          MediaWidgetSizeClass.Standard -> 18f
+          MediaWidgetSizeClass.Expanded -> 21f
+          MediaWidgetSizeClass.Full -> 25f
+        },
+        artistSp = when (sizeClass) {
+          MediaWidgetSizeClass.Full -> 16f
+          MediaWidgetSizeClass.Expanded -> 15f
+          else -> 14f
+        },
+        permissionSp = if (sizeClass == MediaWidgetSizeClass.Full) 12f else 11f,
+        metaSp = if (sizeClass == MediaWidgetSizeClass.Full) 13f else 12f,
+        controlsRowHeightDp = controlsRowHeight,
+        playButtonDp = playButton,
+        sideButtonDp = sideButton,
+        playIconDp = when (sizeClass) {
+          MediaWidgetSizeClass.Mini -> 24
+          MediaWidgetSizeClass.Compact -> 26
+          MediaWidgetSizeClass.Standard -> 28
+          MediaWidgetSizeClass.Expanded -> 31
+          MediaWidgetSizeClass.Full -> 35
+        },
+        sideIconDp = when (sizeClass) {
+          MediaWidgetSizeClass.Full -> 27
+          MediaWidgetSizeClass.Expanded -> 25
+          else -> 23
+        },
+        extraRowHeightDp = extraRowHeight,
+        extraButtonDp = if (sizeClass == MediaWidgetSizeClass.Full) 48 else 42,
+        extraIconDp = if (sizeClass == MediaWidgetSizeClass.Full) 25 else 22,
+        progressHeightDp = if (sizeClass == MediaWidgetSizeClass.Full) 5f else 4f,
+      )
+    }
+  }
+}
+
 private data class MediaWidgetStyle(
   val background: Bitmap,
+  val backgroundSignature: String,
   val primaryTextColor: Int,
   val secondaryTextColor: Int,
   val controlIconColor: Int,
+  val disabledControlIconColor: Int,
   val playIconColor: Int,
   val controlSurfaceColor: Int,
+  val disabledControlSurfaceColor: Int,
   val playSurfaceColor: Int,
   val sourcePillColor: Int,
   val artworkFrameColor: Int,
@@ -469,116 +1001,78 @@ private data class MediaWidgetStyle(
       context: Context,
       artwork: Bitmap?,
       settings: AppSettings,
+      layout: MediaWidgetLayoutSpec,
     ): MediaWidgetStyle {
       val palette = extractPalette(artwork)
-      val accent = palette.vibrant
+      val accent = palette.vibrant.enrich(0.08f)
+      val backgroundColor = accent.toWidgetBackgroundColor(settings.mediaWidgetTheme)
       val darkSurface = when (settings.mediaWidgetTheme) {
         MediaWidgetTheme.DarkGlass -> true
-        MediaWidgetTheme.AlbumColor -> accent.luminance() < 0.46f
-        MediaWidgetTheme.SamsungGlass,
-        MediaWidgetTheme.AdaptiveGlass,
         MediaWidgetTheme.LightGlass -> false
+        else -> backgroundColor.luminance() < 0.48f
       }
-
+      val density = context.resources.displayMetrics.density
+      val backgroundWidth = (layout.widthDp * density).toInt().coerceIn(BackgroundMinPx, BackgroundMaxPx)
+      val backgroundHeight = (layout.heightDp * density).toInt().coerceIn(BackgroundMinPx, BackgroundMaxPx)
       val background = createBackgroundBitmap(
-        accent = accent,
-        dominant = palette.dominant,
-        settings = settings,
+        backgroundColor = backgroundColor,
+        width = backgroundWidth,
+        height = backgroundHeight,
         darkSurface = darkSurface,
       )
-
-      // Always-white text family — the Samsung / Spotify frosted-colour look.
-      val primary = if (darkSurface) Color.WHITE else Color.rgb(22, 26, 24)
-      val secondary = if (darkSurface) {
-        Color.argb(220, 255, 255, 255)
-      } else {
-        Color.argb(205, 52, 58, 55)
-      }
-      val controlIcon = if (darkSurface) Color.argb(238, 255, 255, 255) else Color.rgb(34, 38, 36)
-      val controlSurface = if (darkSurface) Color.argb(40, 255, 255, 255) else Color.argb(88, 255, 255, 255)
-      val playSurface = if (darkSurface) Color.argb(238, 246, 250, 246) else accent.lighten(0.42f).withAlpha(238)
-      val playIcon = if (darkSurface) Color.rgb(15, 20, 18) else Color.rgb(17, 24, 21)
-      val sourcePill = if (darkSurface) accent.lighten(0.18f).withAlpha(72) else accent.lighten(0.55f).withAlpha(128)
-      val artworkFrame = if (darkSurface) Color.argb(36, 255, 255, 255) else Color.argb(82, 255, 255, 255)
+      val primary = backgroundColor.bestContentColor()
+      val secondary = backgroundColor.contentVariantColor(darkSurface)
+      val controlSurface = backgroundColor.secondaryControlColor(darkSurface)
+      val disabledControlSurface = backgroundColor.disabledControlColor(darkSurface)
+      val playSurface = backgroundColor.playButtonColor(darkSurface)
+      val sourcePill = backgroundColor.sourcePillColor(darkSurface)
+      val artworkFrame = backgroundColor.artworkFrameColor(darkSurface)
       return MediaWidgetStyle(
         background = background,
+        backgroundSignature = "$backgroundColor:${layout.widthDp}x${layout.heightDp}",
         primaryTextColor = primary,
         secondaryTextColor = secondary,
-        controlIconColor = controlIcon,
-        playIconColor = playIcon,
+        controlIconColor = controlSurface.bestContentColor(),
+        disabledControlIconColor = disabledControlSurface.bestContentColor().blendWith(disabledControlSurface, 0.24f),
+        playIconColor = playSurface.bestContentColor(),
         controlSurfaceColor = controlSurface,
+        disabledControlSurfaceColor = disabledControlSurface,
         playSurfaceColor = playSurface,
         sourcePillColor = sourcePill,
         artworkFrameColor = artworkFrame,
-        progressColor = if (darkSurface) Color.argb(206, 255, 255, 255) else Color.argb(150, 26, 30, 28),
-        progressTrackColor = if (darkSurface) Color.argb(44, 255, 255, 255) else Color.argb(38, 26, 30, 28),
+        progressColor = playSurface,
+        progressTrackColor = controlSurface,
       )
     }
 
     private fun createBackgroundBitmap(
-      accent: Int,
-      dominant: Int,
-      settings: AppSettings,
+      backgroundColor: Int,
+      width: Int,
+      height: Int,
       darkSurface: Boolean,
     ): Bitmap {
-      val width = CompanionBG_W
-      val height = CompanionBG_H
-      val radius = CompanionBG_RADIUS
+      val radius = (min(width, height) * 0.10f).coerceIn(42f, 74f)
       val bounds = RectF(0f, 0f, width.toFloat(), height.toFloat())
 
       val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
       val layer = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
       val layerCanvas = Canvas(layer)
 
-      val baseColor = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.DarkGlass -> dominant
-          .darken(0.48f)
-          .blendWith(Color.rgb(18, 22, 20), 0.58f)
-          .withAlpha(238)
-        MediaWidgetTheme.AlbumColor -> if (darkSurface) {
-          dominant.darken(0.34f).withAlpha(238)
-        } else {
-          dominant.lighten(0.64f).withAlpha(242)
-        }
-        MediaWidgetTheme.AdaptiveGlass -> dominant
-          .lighten(0.82f)
-          .blendWith(Color.rgb(245, 247, 243), 0.68f)
-          .withAlpha(242)
-        MediaWidgetTheme.LightGlass -> Color.argb(244, 255, 255, 250)
-        MediaWidgetTheme.SamsungGlass -> dominant
-          .lighten(0.76f)
-          .blendWith(Color.rgb(246, 243, 236), 0.58f)
-          .withAlpha(242)
+      val topTone = backgroundColor.lighten(0.10f)
+      val middleTone = backgroundColor.lighten(0.025f)
+      val lowerTone = backgroundColor.darken(0.045f)
+      val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = LinearGradient(
+          0f,
+          0f,
+          width.toFloat(),
+          height.toFloat(),
+          intArrayOf(topTone, middleTone, lowerTone),
+          floatArrayOf(0f, 0.54f, 1f),
+          Shader.TileMode.CLAMP,
+        )
       }
-      layerCanvas.drawRoundRect(bounds, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = baseColor })
-
-      //    vagamente" — dreamy, vaguely-coloured, like Samsung system widgets.
-      val glassColor = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.DarkGlass -> Color.argb(44, 0, 0, 0)
-        MediaWidgetTheme.AlbumColor -> if (darkSurface) {
-          accent.darken(0.28f).withAlpha(82)
-        } else {
-          accent.lighten(0.58f).withAlpha(72)
-        }
-        MediaWidgetTheme.AdaptiveGlass -> Color.argb(52, 255, 255, 255)
-        MediaWidgetTheme.LightGlass -> Color.argb(58, 255, 255, 255)
-        MediaWidgetTheme.SamsungGlass -> Color.argb(46, 255, 255, 255)
-      }
-      layerCanvas.drawRoundRect(bounds, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = glassColor })
-
-      val tintAlpha = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.AlbumColor -> 62
-        MediaWidgetTheme.DarkGlass -> 38
-        MediaWidgetTheme.AdaptiveGlass -> 34
-        MediaWidgetTheme.LightGlass -> 28
-        MediaWidgetTheme.SamsungGlass -> 44
-      }
-      layerCanvas.drawRoundRect(bounds, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = accent.withAlpha(tintAlpha) })
-
-      val softVeil = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = if (darkSurface) Color.argb(26, 0, 0, 0) else Color.argb(34, 255, 255, 255)
-      }
-      layerCanvas.drawRoundRect(bounds, radius, radius, softVeil)
+      layerCanvas.drawRoundRect(bounds, radius, radius, gradientPaint)
 
       // Mask everything into the rounded card.
       val canvas = Canvas(output)
@@ -594,7 +1088,7 @@ private data class MediaWidgetStyle(
       val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 1.4f
-        color = Color.argb(70, 255, 255, 255)
+        color = if (darkSurface) backgroundColor.lighten(0.18f) else backgroundColor.darken(0.10f)
       }
       canvas.drawRoundRect(bounds.insetBy(0.7f), radius, radius, rimPaint)
       return output
@@ -694,59 +1188,6 @@ private fun extractPalette(artwork: Bitmap?): CoverPalette {
   return CoverPalette(dominant = dominant, vibrant = vibrant)
 }
 
-private fun gentlePressScale(progress: Float): Float =
-  1f - 0.10f * sin((Math.PI * progress.coerceIn(0f, 1f)).toFloat())
-
-// ---------- icon drawing ----------
-
-private fun drawGlyph(
-  context: Context,
-  drawableId: Int,
-  canvasSizeDp: Int,
-  iconSizeDp: Int,
-  color: Int,
-  scale: Float = 1.0f,
-  alpha: Float = 1.0f,
-): Bitmap {
-  val canvasPx = context.dp(canvasSizeDp)
-  val iconPx = context.dp(iconSizeDp)
-  val bitmap = Bitmap.createBitmap(canvasPx, canvasPx, Bitmap.Config.ARGB_8888)
-  val canvas = Canvas(bitmap)
-  drawGlyphOnCanvas(
-    context = context,
-    canvas = canvas,
-    drawableId = drawableId,
-    center = canvasPx / 2f,
-    iconPx = iconPx,
-    color = color,
-    scale = scale,
-    alpha = alpha,
-  )
-  return bitmap
-}
-
-private fun drawGlyphOnCanvas(
-  context: Context,
-  canvas: Canvas,
-  drawableId: Int,
-  center: Float,
-  iconPx: Int,
-  color: Int,
-  scale: Float,
-  alpha: Float,
-) {
-  val drawable = context.getDrawable(drawableId) ?: return
-  drawable.mutate().setColorFilter(color, PorterDuff.Mode.SRC_IN)
-  drawable.alpha = (alpha * 255).toInt().coerceIn(0, 255)
-  canvas.save()
-  canvas.translate(center, center)
-  canvas.scale(scale, scale)
-  val halfIcon = iconPx / 2
-  drawable.setBounds(-halfIcon, -halfIcon, halfIcon, halfIcon)
-  drawable.draw(canvas)
-  canvas.restore()
-}
-
 // ---------- bitmap helpers ----------
 
 private fun MediaPlaybackSnapshot.progressPermille(): Int {
@@ -754,6 +1195,82 @@ private fun MediaPlaybackSnapshot.progressPermille(): Int {
   return ((positionMs.coerceIn(0L, durationMs) * 1000L) / durationMs)
     .toInt()
     .coerceIn(0, 1000)
+}
+
+private fun MediaPlaybackSnapshot.statusLabel(): String =
+  when (availability) {
+    MediaPlaybackAvailability.PermissionRequired -> "Accesso richiesto"
+    MediaPlaybackAvailability.NoSession -> if (isFromCache) "Ultima sessione" else "Nessuna sessione"
+    MediaPlaybackAvailability.Active -> if (isPlaying) "In riproduzione" else "In pausa"
+  }
+
+private fun MediaWidgetInteraction.statusLabel(): String =
+  when (action) {
+    MediaControlAction.TogglePlayPause -> if (expectedPlaying == true) {
+      "Avvio riproduzione…"
+    } else {
+      "Metto in pausa…"
+    }
+    MediaControlAction.Next -> "Passo al brano successivo…"
+    MediaControlAction.Previous -> "Torno al brano precedente…"
+  }
+
+private fun MediaPlaybackSnapshot.canHandle(action: MediaControlAction): Boolean =
+  when (action) {
+    MediaControlAction.TogglePlayPause -> canPlayPause
+    MediaControlAction.Next -> canSkipNext
+    MediaControlAction.Previous -> canSkipPrevious
+  }
+
+private fun MediaPlaybackSnapshot.confirms(command: PendingMediaCommand): Boolean {
+  if (availability != MediaPlaybackAvailability.Active) return false
+  return when (command.action) {
+    MediaControlAction.TogglePlayPause -> isPlaying == command.expectedPlaying
+    MediaControlAction.Next,
+    MediaControlAction.Previous -> {
+      val currentTrack = trackSignature()
+      currentTrack.isNotBlank() && currentTrack != command.baselineSnapshot.trackSignature()
+    }
+  }
+}
+
+private fun MediaPlaybackSnapshot.trackSignature(): String =
+  if (packageName.isBlank() && title.isBlank() && artist.isBlank()) {
+    ""
+  } else {
+    listOf(packageName, title, artist).joinToString("|")
+  }
+
+private fun MediaPlaybackSnapshot.artworkSignature(): String =
+  "${trackSignature()}|${artwork?.width ?: 0}x${artwork?.height ?: 0}"
+
+private fun MediaPlaybackSnapshot.timeLabel(): String {
+  if (durationMs <= 0L) return ""
+  val position = positionMs.coerceIn(0L, durationMs)
+  return "${position.clockLabel()} / ${durationMs.clockLabel()}"
+}
+
+private fun Long.clockLabel(): String {
+  val totalSeconds = (this / 1000L).coerceAtLeast(0L)
+  val seconds = (totalSeconds % 60).toInt()
+  val minutes = ((totalSeconds / 60) % 60).toInt()
+  val hours = (totalSeconds / 3600).toInt()
+  fun two(value: Int) = if (value < 10) "0$value" else value.toString()
+  return if (hours > 0) {
+    "$hours:${two(minutes)}:${two(seconds)}"
+  } else {
+    "$minutes:${two(seconds)}"
+  }
+}
+
+private fun RemoteViews.setSquareDp(viewId: Int, sizeDp: Int) {
+  setViewLayoutWidth(viewId, sizeDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+  setViewLayoutHeight(viewId, sizeDp.toFloat(), TypedValue.COMPLEX_UNIT_DIP)
+}
+
+private fun RemoteViews.setScale(viewId: Int, scale: Float) {
+  setFloat(viewId, "setScaleX", scale)
+  setFloat(viewId, "setScaleY", scale)
 }
 
 private fun Bitmap.roundedSquare(): Bitmap {
@@ -774,8 +1291,45 @@ private fun Bitmap.roundedSquare(): Bitmap {
   return output
 }
 
-private fun Int.luminance(): Float =
+internal fun Int.luminance(): Float =
   (0.299f * Color.red(this) + 0.587f * Color.green(this) + 0.114f * Color.blue(this)) / 255f
+
+internal fun Int.toWidgetBackgroundColor(theme: MediaWidgetTheme): Int {
+  val source = enrich(0.10f)
+  val color = when (theme) {
+    MediaWidgetTheme.SamsungGlass -> source.lighten(0.42f)
+    MediaWidgetTheme.AdaptiveGlass -> source.lighten(if (source.luminance() < 0.45f) 0.46f else 0.34f)
+    MediaWidgetTheme.LightGlass -> source.lighten(0.68f).blendWith(Color.rgb(250, 251, 246), 0.24f)
+    MediaWidgetTheme.DarkGlass -> source.darken(0.48f).blendWith(Color.rgb(18, 22, 20), 0.30f)
+    MediaWidgetTheme.AlbumColor -> source
+  }
+  return when {
+    theme == MediaWidgetTheme.AlbumColor && color.luminance() > 0.82f -> color.darken(0.08f)
+    theme == MediaWidgetTheme.AlbumColor && color.luminance() < 0.12f -> color.lighten(0.10f)
+    else -> color
+  }
+}
+
+private fun Int.bestContentColor(): Int =
+  if (luminance() < 0.50f) Color.rgb(250, 255, 251) else Color.rgb(15, 20, 18)
+
+private fun Int.contentVariantColor(darkSurface: Boolean): Int =
+  if (darkSurface) Color.rgb(220, 231, 224) else Color.rgb(45, 53, 49)
+
+internal fun Int.playButtonColor(darkSurface: Boolean): Int =
+  if (darkSurface) lighten(0.24f) else darken(0.14f)
+
+private fun Int.secondaryControlColor(darkSurface: Boolean): Int =
+  if (darkSurface) lighten(0.12f) else darken(0.055f)
+
+private fun Int.disabledControlColor(darkSurface: Boolean): Int =
+  if (darkSurface) lighten(0.06f) else darken(0.025f)
+
+private fun Int.sourcePillColor(darkSurface: Boolean): Int =
+  if (darkSurface) lighten(0.13f) else lighten(0.08f)
+
+private fun Int.artworkFrameColor(darkSurface: Boolean): Int =
+  if (darkSurface) lighten(0.09f) else lighten(0.12f)
 
 private fun Int.lighten(amount: Float): Int = Color.rgb(
   (Color.red(this) + (255 - Color.red(this)) * amount).toInt().coerceIn(0, 255),
@@ -808,9 +1362,6 @@ private fun Int.enrich(amount: Float): Int {
   fun channel(c: Int) = (grey + (c - grey) * (1f + amount)).toInt().coerceIn(0, 255)
   return Color.rgb(channel(r), channel(g), channel(b))
 }
-
-private fun Int.withAlpha(alpha: Int): Int =
-  Color.argb(alpha.coerceIn(0, 255), Color.red(this), Color.green(this), Color.blue(this))
 
 private fun RectF.insetBy(amount: Float): RectF =
   RectF(left + amount, top + amount, right - amount, bottom - amount)

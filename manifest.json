@@ -15,6 +15,7 @@
       "ref": ""
     },
     "stable": {
+<<<<<<< Updated upstream
       "version": "0.2.9",
       "releaseDate": "2026-07-01",
       "changelog": "Widget media più robusto nelle dimensioni: corretto il calcolo verticale nei layout wide per evitare overflow dell artwork, aggiunta QA strumentale S0-S5 con render RemoteViews misurato su device e mantenuto il gradiente opaco del widget.",
@@ -34,6 +35,36 @@
     },
     "history": [
       {
+=======
+      "version": "0.3.0",
+      "releaseDate": "2026-07-10",
+      "changelog": "Fix: non viene piu mostrata la copertina della canzone precedente durante il cambio brano. Miglioramento: crossfade fluido della cover quando cambia canzone, controlli piu reattivi.",
+      "releaseTag": "stable-pampa-widgets-v0.3.0",
+      "apkAsset": "pampa-widgets-0.3.0.apk",
+      "exeAsset": "",
+      "sizeBytes": 52411123
+    },
+    "beta": {
+      "version": "0.3.0",
+      "releaseDate": "2026-07-10",
+      "changelog": "Fix: non viene piu mostrata la copertina della canzone precedente durante il cambio brano. Miglioramento: crossfade fluido della cover quando cambia canzone, controlli piu reattivi.",
+      "releaseTag": "stable-pampa-widgets-v0.3.0",
+      "apkAsset": "pampa-widgets-0.3.0.apk",
+      "exeAsset": "",
+      "sizeBytes": 52411123
+    },
+    "history": [
+      {
+        "version": "0.2.9",
+        "releaseDate": "2026-07-01",
+        "changelog": "Widget media più robusto nelle dimensioni: corretto il calcolo verticale nei layout wide per evitare overflow dell artwork, aggiunta QA strumentale S0-S5 con render RemoteViews misurato su device e mantenuto il gradiente opaco del widget.",
+        "releaseTag": "stable-pampa-widgets-v0.2.9",
+        "apkAsset": "pampa-widgets-0.2.9.apk",
+        "exeAsset": "",
+        "sizeBytes": 52391185
+      },
+      {
+>>>>>>> Stashed changes
         "version": "0.2.8",
         "releaseDate": "2026-07-01",
         "changelog": "Widget media più rifinito: sfondo a gradiente morbido basato sul colore album, pulsante play con contrasto adattivo, layout responsivo da 2x2 a pagina intera, controlli extra per refresh/apertura app e copertura automatizzata delle configurazioni principali.",

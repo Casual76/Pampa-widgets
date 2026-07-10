@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import com.pampa.widgets.core.media.MediaControlAction
 import com.pampa.widgets.core.media.MediaSessionReader
 
@@ -16,23 +17,43 @@ class MediaWidgetProvider : AppWidgetProvider() {
     MediaWidgetUpdater.update(context, appWidgetManager, appWidgetIds)
   }
 
+  override fun onAppWidgetOptionsChanged(
+    context: Context,
+    appWidgetManager: AppWidgetManager,
+    appWidgetId: Int,
+    newOptions: Bundle,
+  ) {
+    super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+    MediaWidgetUpdater.update(context, appWidgetManager, intArrayOf(appWidgetId))
+  }
+
+  override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+    MediaWidgetUpdater.onDeleted(appWidgetIds)
+    super.onDeleted(context, appWidgetIds)
+  }
+
   override fun onReceive(context: Context, intent: Intent) {
     super.onReceive(context, intent)
     when (intent.action) {
       ActionTogglePlayPause -> {
         val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.TogglePlayPause)
-        MediaSessionReader.dispatch(context, MediaControlAction.TogglePlayPause)
-        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.TogglePlayPause, feedbackSnapshot)
+        val dispatched = MediaSessionReader.dispatch(context, MediaControlAction.TogglePlayPause)
+        MediaWidgetUpdater.afterMediaControl(
+          context,
+          MediaControlAction.TogglePlayPause,
+          feedbackSnapshot,
+          dispatched,
+        )
       }
       ActionNext -> {
         val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.Next)
-        MediaSessionReader.dispatch(context, MediaControlAction.Next)
-        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Next, feedbackSnapshot)
+        val dispatched = MediaSessionReader.dispatch(context, MediaControlAction.Next)
+        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Next, feedbackSnapshot, dispatched)
       }
       ActionPrevious -> {
         val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.Previous)
-        MediaSessionReader.dispatch(context, MediaControlAction.Previous)
-        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Previous, feedbackSnapshot)
+        val dispatched = MediaSessionReader.dispatch(context, MediaControlAction.Previous)
+        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Previous, feedbackSnapshot, dispatched)
       }
       ActionRefresh -> MediaWidgetUpdater.updateAll(context)
     }

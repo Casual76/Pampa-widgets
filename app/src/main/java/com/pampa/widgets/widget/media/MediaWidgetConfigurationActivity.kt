@@ -187,6 +187,7 @@ private fun MediaWidgetConfigurationScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             ThemeChip("Vetro", MediaWidgetTheme.SamsungGlass, settings.mediaWidgetTheme, onThemeChange)
+            ThemeChip("Adattivo", MediaWidgetTheme.AdaptiveGlass, settings.mediaWidgetTheme, onThemeChange)
             ThemeChip("Album", MediaWidgetTheme.AlbumColor, settings.mediaWidgetTheme, onThemeChange)
             ThemeChip("Chiaro", MediaWidgetTheme.LightGlass, settings.mediaWidgetTheme, onThemeChange)
             ThemeChip("Scuro", MediaWidgetTheme.DarkGlass, settings.mediaWidgetTheme, onThemeChange)
@@ -217,8 +218,8 @@ private fun MediaWidgetConfigurationScreen(
           ConfigSwitchRow("Sorgente", "Mostra Spotify, YouTube Music, Apple Music e simili.", settings.mediaWidgetShowSource, onShowSourceChange)
           ConfigSwitchRow("Artista", "Mostra la riga secondaria sotto il titolo.", settings.mediaWidgetShowArtist, onShowArtistChange)
           ConfigSwitchRow("Ultima canzone", "Mantiene titolo e cover quando Samsung nasconde la sessione.", settings.mediaWidgetKeepLastSong, onKeepLastSongChange)
-          ConfigSwitchRow("Comandi immediati", "Aggiorna subito l'icona play/pausa dopo il tocco.", settings.mediaWidgetInstantControls, onInstantControlsChange)
-          ConfigSwitchRow("Feedback leggero", "Micro-pressione sui pulsanti, disattivata di default.", settings.mediaWidgetAnimatedFeedback, onAnimatedFeedbackChange)
+          ConfigSwitchRow("Risposta immediata", "Mostra subito l'indicatore di comando, senza cambiare l'icona prima della conferma.", settings.mediaWidgetInstantControls, onInstantControlsChange)
+          ConfigSwitchRow("Feedback dinamico", "Ripple, attesa e transizioni morbide del launcher. Attivo di default.", settings.mediaWidgetAnimatedFeedback, onAnimatedFeedbackChange)
         }
       }
 
@@ -256,17 +257,21 @@ private fun MediaWidgetConfigurationScreen(
 private fun WidgetPreview(settings: AppSettings) {
   val accent = when (settings.mediaWidgetTheme) {
     MediaWidgetTheme.AlbumColor -> MaterialTheme.colorScheme.primary
+    MediaWidgetTheme.AdaptiveGlass -> MaterialTheme.colorScheme.secondary
     MediaWidgetTheme.DarkGlass -> Color(0xFF202722)
     else -> MaterialTheme.colorScheme.tertiary
   }
   val dark = settings.mediaWidgetTheme == MediaWidgetTheme.DarkGlass
   val cardColor = if (dark) {
-    Color(0xE61B211E)
+    Color(0xFF1B211E)
   } else {
-    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+    MaterialTheme.colorScheme.surfaceContainerHigh
   }
   val textColor = if (dark) Color.White else MaterialTheme.colorScheme.onSurface
-  val secondaryTextColor = if (dark) Color.White.copy(alpha = 0.78f) else MaterialTheme.colorScheme.onSurfaceVariant
+  val secondaryTextColor = if (dark) Color(0xFFE0EBE4) else MaterialTheme.colorScheme.onSurfaceVariant
+  val previewControlSurface = if (dark) Color(0xFF303B34) else MaterialTheme.colorScheme.surfaceContainerHighest
+  val previewProgressTrack = if (dark) Color(0xFF3A463F) else MaterialTheme.colorScheme.surfaceVariant
+  val previewProgress = if (dark) Color(0xFFE6F2EA) else MaterialTheme.colorScheme.onSurface
   Surface(
     modifier = Modifier.fillMaxWidth(),
     shape = MaterialTheme.shapes.extraLarge,
@@ -290,7 +295,7 @@ private fun WidgetPreview(settings: AppSettings) {
               },
             )
             .clip(MaterialTheme.shapes.large)
-            .background(accent.copy(alpha = 0.82f)),
+            .background(accent),
           contentAlignment = Alignment.Center,
         ) {
           Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White)
@@ -318,14 +323,14 @@ private fun WidgetPreview(settings: AppSettings) {
           .fillMaxWidth()
           .height(4.dp)
           .clip(MaterialTheme.shapes.extraSmall)
-          .background(if (dark) Color.White.copy(alpha = 0.16f) else Color.Black.copy(alpha = 0.10f)),
+          .background(previewProgressTrack),
       ) {
         Box(
           modifier = Modifier
             .fillMaxWidth(0.62f)
             .height(4.dp)
             .clip(MaterialTheme.shapes.extraSmall)
-            .background(if (dark) Color.White.copy(alpha = 0.78f) else Color.Black.copy(alpha = 0.42f)),
+            .background(previewProgress),
         )
       }
 
@@ -334,19 +339,19 @@ private fun WidgetPreview(settings: AppSettings) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        PreviewControlIcon(Icons.Rounded.SkipPrevious, textColor.copy(alpha = 0.88f), dark)
+        PreviewControlIcon(Icons.Rounded.SkipPrevious, textColor, previewControlSurface)
         Spacer(Modifier.width(16.dp))
         Box(
           modifier = Modifier
             .size(56.dp)
             .clip(MaterialTheme.shapes.extraLarge)
-            .background(accent.copy(alpha = if (dark) 0.88f else 0.42f)),
+            .background(accent),
           contentAlignment = Alignment.Center,
         ) {
-          Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = textColor, modifier = Modifier.size(32.dp))
+          Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = if (dark) Color(0xFF102018) else Color.White, modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.width(16.dp))
-        PreviewControlIcon(Icons.Rounded.SkipNext, textColor.copy(alpha = 0.88f), dark)
+        PreviewControlIcon(Icons.Rounded.SkipNext, textColor, previewControlSurface)
       }
     }
   }
@@ -356,13 +361,13 @@ private fun WidgetPreview(settings: AppSettings) {
 private fun PreviewControlIcon(
   imageVector: androidx.compose.ui.graphics.vector.ImageVector,
   tint: Color,
-  dark: Boolean,
+  surface: Color,
 ) {
   Box(
     modifier = Modifier
       .size(44.dp)
       .clip(MaterialTheme.shapes.extraLarge)
-      .background(if (dark) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.40f)),
+      .background(surface),
     contentAlignment = Alignment.Center,
   ) {
     Icon(imageVector, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))

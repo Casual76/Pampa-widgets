@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <color name="ic_launcher_background">#0E1B18</color>
-  <color name="widget_surface">#D9F3F0EA</color>
-  <color name="widget_surface_high">#E8FFFFFF</color>
-  <color name="widget_surface_highest">#33FFFFFF</color>
+  <color name="widget_surface">#F3F0EA</color>
+  <color name="widget_surface_high">#FFFFFF</color>
+  <color name="widget_surface_highest">#EEF3EE</color>
   <color name="widget_on_surface">#F8FFFB</color>
   <color name="widget_on_surface_variant">#DDE7E0</color>
   <color name="widget_primary">#F5FFF9</color>

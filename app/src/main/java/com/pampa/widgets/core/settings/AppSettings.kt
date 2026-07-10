@@ -43,5 +43,5 @@ data class AppSettings(
   val mediaWidgetShowArtist: Boolean = true,
   val mediaWidgetKeepLastSong: Boolean = true,
   val mediaWidgetInstantControls: Boolean = false,
-  val mediaWidgetAnimatedFeedback: Boolean = false,
+  val mediaWidgetAnimatedFeedback: Boolean = true,
 )

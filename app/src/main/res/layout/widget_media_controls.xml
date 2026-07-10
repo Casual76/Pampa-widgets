@@ -5,15 +5,33 @@
   android:layout_height="match_parent"
   android:background="@android:color/transparent">
 
-  <ImageView
-    android:id="@+id/media_widget_background"
+  <ViewFlipper
+    android:id="@+id/media_widget_background_flipper"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:contentDescription="@null"
-    android:scaleType="fitXY"
-    android:src="@drawable/bg_media_widget" />
+    android:animateFirstView="false"
+    android:inAnimation="@anim/media_widget_fade_in"
+    android:outAnimation="@anim/media_widget_fade_out">
+
+    <ImageView
+      android:id="@+id/media_widget_background"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:contentDescription="@null"
+      android:scaleType="fitXY"
+      android:src="@drawable/bg_media_widget" />
+
+    <ImageView
+      android:id="@+id/media_widget_background_next"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:contentDescription="@null"
+      android:scaleType="fitXY"
+      android:src="@drawable/bg_media_widget" />
+  </ViewFlipper>
 
   <LinearLayout
+    android:id="@+id/media_widget_content"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:baselineAligned="false"
@@ -39,13 +57,30 @@
         android:layout_height="106dp"
         android:background="@drawable/bg_media_artwork">
 
-        <ImageView
-          android:id="@+id/media_widget_artwork"
+        <ViewFlipper
+          android:id="@+id/media_widget_artwork_flipper"
           android:layout_width="match_parent"
           android:layout_height="match_parent"
-          android:contentDescription="@null"
-          android:scaleType="centerCrop"
-          android:src="@drawable/ic_widget_music_note" />
+          android:animateFirstView="false"
+          android:inAnimation="@anim/media_widget_fade_in"
+          android:outAnimation="@anim/media_widget_fade_out">
+
+          <ImageView
+            android:id="@+id/media_widget_artwork"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_widget_music_note" />
+
+          <ImageView
+            android:id="@+id/media_widget_artwork_next"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_widget_music_note" />
+        </ViewFlipper>
       </FrameLayout>
 
       <LinearLayout
@@ -127,6 +162,42 @@
       android:visibility="invisible" />
 
     <LinearLayout
+      android:id="@+id/media_widget_meta_row"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginBottom="8dp"
+      android:baselineAligned="false"
+      android:gravity="center_vertical"
+      android:orientation="horizontal"
+      android:visibility="gone">
+
+      <TextView
+        android:id="@+id/media_widget_status"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="In riproduzione"
+        android:textColor="@color/widget_on_surface_variant"
+        android:textSize="12sp" />
+
+      <TextView
+        android:id="@+id/media_widget_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="0:00 / 0:00"
+        android:textColor="@color/widget_on_surface_variant"
+        android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
       android:id="@+id/media_widget_controls"
       android:layout_width="match_parent"
       android:layout_height="54dp"
@@ -142,16 +213,62 @@
         android:padding="10dp"
         android:src="@drawable/ic_widget_previous" />
 
-      <ImageButton
-        android:id="@+id/media_widget_play_pause"
+      <FrameLayout
+        android:id="@+id/media_widget_play_pause_container"
         android:layout_width="54dp"
         android:layout_height="54dp"
         android:layout_marginStart="14dp"
-        android:layout_marginEnd="14dp"
-        android:background="@drawable/bg_media_control_primary"
-        android:contentDescription="Play pausa"
-        android:padding="12dp"
-        android:src="@drawable/ic_widget_play" />
+        android:layout_marginEnd="14dp">
+
+        <ImageButton
+          android:id="@+id/media_widget_play_pause"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:background="@drawable/bg_media_control_primary"
+          android:contentDescription="Play pausa"
+          android:padding="0dp"
+          android:src="@null" />
+
+        <ViewFlipper
+          android:id="@+id/media_widget_play_pause_glyph_flipper"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:animateFirstView="false"
+          android:clickable="false"
+          android:focusable="false"
+          android:inAnimation="@anim/media_widget_glyph_in"
+          android:outAnimation="@anim/media_widget_glyph_out">
+
+          <ImageView
+            android:id="@+id/media_widget_play_glyph"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:padding="13dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_widget_play" />
+
+          <ImageView
+            android:id="@+id/media_widget_pause_glyph"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:padding="13dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_widget_pause" />
+        </ViewFlipper>
+
+        <ProgressBar
+          android:id="@+id/media_widget_command_pending"
+          style="?android:attr/progressBarStyleSmall"
+          android:layout_width="28dp"
+          android:layout_height="28dp"
+          android:layout_gravity="center"
+          android:clickable="false"
+          android:contentDescription="@null"
+          android:indeterminate="true"
+          android:visibility="gone" />
+      </FrameLayout>
 
       <ImageButton
         android:id="@+id/media_widget_next"
@@ -161,6 +278,46 @@
         android:contentDescription="Traccia successiva"
         android:padding="10dp"
         android:src="@drawable/ic_widget_next" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:id="@+id/media_widget_extra_actions"
+      android:layout_width="match_parent"
+      android:layout_height="44dp"
+      android:layout_marginTop="10dp"
+      android:baselineAligned="false"
+      android:gravity="center"
+      android:orientation="horizontal"
+      android:visibility="gone">
+
+      <ImageButton
+        android:id="@+id/media_widget_refresh"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_media_control"
+        android:contentDescription="Aggiorna widget"
+        android:padding="10dp"
+        android:src="@drawable/ic_widget_refresh" />
+
+      <ImageButton
+        android:id="@+id/media_widget_open_media"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="14dp"
+        android:background="@drawable/bg_media_control"
+        android:contentDescription="Apri app musicale"
+        android:padding="10dp"
+        android:src="@drawable/ic_widget_open_app" />
+
+      <ImageButton
+        android:id="@+id/media_widget_open_pampa"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:background="@drawable/bg_media_control"
+        android:contentDescription="Apri Pampa"
+        android:padding="10dp"
+        android:src="@drawable/ic_widget_settings" />
     </LinearLayout>
   </LinearLayout>
 </FrameLayout>

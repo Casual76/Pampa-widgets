@@ -140,7 +140,7 @@ private fun Preferences.toAppSettings(): AppSettings {
     mediaWidgetShowArtist = this[PreferencesSettingsRepository.Keys.MediaWidgetShowArtist] ?: true,
     mediaWidgetKeepLastSong = this[PreferencesSettingsRepository.Keys.MediaWidgetKeepLastSong] ?: true,
     mediaWidgetInstantControls = this[PreferencesSettingsRepository.Keys.MediaWidgetInstantControls] ?: false,
-    mediaWidgetAnimatedFeedback = this[PreferencesSettingsRepository.Keys.MediaWidgetAnimatedFeedback] ?: false,
+    mediaWidgetAnimatedFeedback = this[PreferencesSettingsRepository.Keys.MediaWidgetAnimatedFeedback] ?: true,
   )
 }
 

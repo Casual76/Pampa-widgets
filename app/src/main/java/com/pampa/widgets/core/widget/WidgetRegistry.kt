@@ -26,7 +26,7 @@ class LocalWidgetRegistry @Inject constructor() : WidgetRegistry {
       shortDescription = "Controlli multimediali per Spotify, YouTube Music e sessioni Android attive.",
       category = WidgetCategory.Media,
       sizes = listOf(
-        WidgetSize(minColumns = 4, minRows = 2, preferredColumns = 4, preferredRows = 2),
+        WidgetSize(minColumns = 2, minRows = 2, preferredColumns = 3, preferredRows = 2),
       ),
       icon = Icons.Rounded.GraphicEq,
       preview = WidgetPreview(
@@ -40,6 +40,8 @@ class LocalWidgetRegistry @Inject constructor() : WidgetRegistry {
         "Play/Pausa",
         "Traccia successiva",
         "Traccia precedente",
+        "Aggiorna widget",
+        "Layout ridimensionabile",
         "MediaSession",
       ),
       appWidgetProviderClassName = MediaWidgetProvider::class.java.name,
