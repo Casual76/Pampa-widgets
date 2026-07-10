@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.2.7",
-      "releaseDate": "2026-06-25",
-      "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
-      "releaseTag": "stable-pampa-widgets-v0.2.7",
-      "apkAsset": "pampa-widgets-0.2.7.apk",
+      "version": "0.3.0",
+      "releaseDate": "2026-07-10",
+      "changelog": "Fix: non viene piu mostrata la copertina della canzone precedente durante il cambio brano. Miglioramento: crossfade fluido della cover quando cambia canzone, controlli piu reattivi.",
+      "releaseTag": "stable-pampa-widgets-v0.3.0",
+      "apkAsset": "pampa-widgets-0.3.0.apk",
       "exeAsset": "",
-      "sizeBytes": 52356227
+      "sizeBytes": 52411123
     },
     "beta": {
-      "version": "0.2.7",
-      "releaseDate": "2026-06-25",
-      "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
-      "releaseTag": "stable-pampa-widgets-v0.2.7",
-      "apkAsset": "pampa-widgets-0.2.7.apk",
+      "version": "0.3.0",
+      "releaseDate": "2026-07-10",
+      "changelog": "Fix: non viene piu mostrata la copertina della canzone precedente durante il cambio brano. Miglioramento: crossfade fluido della cover quando cambia canzone, controlli piu reattivi.",
+      "releaseTag": "stable-pampa-widgets-v0.3.0",
+      "apkAsset": "pampa-widgets-0.3.0.apk",
       "exeAsset": "",
-      "sizeBytes": 52356227
+      "sizeBytes": 52411123
     },
     "history": [
+      {
+        "version": "0.2.7",
+        "releaseDate": "2026-06-25",
+        "changelog": "Widget Media Controls rifinito: rimosso completamente il tentativo di blur/wallpaper, superficie piu solida e tintata dalla cover, default allineati alle impostazioni migliori (cover grande, sorgente nascosta, risposta controlli non invasiva) e testo piu grande/meno default per riempire meglio la card.",
+        "releaseTag": "stable-pampa-widgets-v0.2.7",
+        "apkAsset": "pampa-widgets-0.2.7.apk",
+        "exeAsset": "",
+        "sizeBytes": 52356227
+      },
       {
         "version": "0.2.6",
         "releaseDate": "2026-06-24",
