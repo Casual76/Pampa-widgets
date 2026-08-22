@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.3.1",
-      "releaseDate": "2026-07-29",
-      "changelog": "Widget Media Controls stabilizzato: aggiornamenti seriali e atomici per testo, cover, colori e controlli; caricamento cover piu affidabile da bitmap e URI con retry e cache legata al brano; timer in tempo reale, bitmap ottimizzate e layout rifinito. Verificato con 30 cambi consecutivi su Spotify, rotazione, riavvio processo e rete offline.",
-      "releaseTag": "stable-pampa-widgets-v0.3.1",
-      "apkAsset": "pampa-widgets-0.3.1.apk",
+      "version": "0.3.2",
+      "releaseDate": "2026-08-22",
+      "changelog": "Eliminato il lampeggio del widget durante gli aggiornamenti; corretto il tap che apriva le impostazioni quando Spotify era chiuso; aggiunte animazioni leggere e migliorati sincronizzazione, cache e gestione delle sessioni media.",
+      "releaseTag": "stable-pampa-widgets-v0.3.2",
+      "apkAsset": "pampa-widgets-0.3.2.apk",
       "exeAsset": "",
-      "sizeBytes": 52443909
+      "sizeBytes": 52460561
     },
     "beta": {
-      "version": "0.3.1",
-      "releaseDate": "2026-07-29",
-      "changelog": "Widget Media Controls stabilizzato: aggiornamenti seriali e atomici per testo, cover, colori e controlli; caricamento cover piu affidabile da bitmap e URI con retry e cache legata al brano; timer in tempo reale, bitmap ottimizzate e layout rifinito. Verificato con 30 cambi consecutivi su Spotify, rotazione, riavvio processo e rete offline.",
-      "releaseTag": "stable-pampa-widgets-v0.3.1",
-      "apkAsset": "pampa-widgets-0.3.1.apk",
+      "version": "0.3.2",
+      "releaseDate": "2026-08-22",
+      "changelog": "Eliminato il lampeggio del widget durante gli aggiornamenti; corretto il tap che apriva le impostazioni quando Spotify era chiuso; aggiunte animazioni leggere e migliorati sincronizzazione, cache e gestione delle sessioni media.",
+      "releaseTag": "stable-pampa-widgets-v0.3.2",
+      "apkAsset": "pampa-widgets-0.3.2.apk",
       "exeAsset": "",
-      "sizeBytes": 52443909
+      "sizeBytes": 52460561
     },
     "history": [
+      {
+        "version": "0.3.1",
+        "releaseDate": "2026-07-29",
+        "changelog": "Widget Media Controls stabilizzato: aggiornamenti seriali e atomici per testo, cover, colori e controlli; caricamento cover piu affidabile da bitmap e URI con retry e cache legata al brano; timer in tempo reale, bitmap ottimizzate e layout rifinito. Verificato con 30 cambi consecutivi su Spotify, rotazione, riavvio processo e rete offline.",
+        "releaseTag": "stable-pampa-widgets-v0.3.1",
+        "apkAsset": "pampa-widgets-0.3.1.apk",
+        "exeAsset": "",
+        "sizeBytes": 52443909
+      },
       {
         "version": "0.3.0",
         "releaseDate": "2026-07-10",
