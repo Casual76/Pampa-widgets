@@ -36,8 +36,8 @@ android {
     applicationId = "com.pampa.widgets"
     minSdk = 31
     targetSdk = 36
-    versionCode = 12
-    versionName = "0.3.0"
+    versionCode = 14
+    versionName = "0.3.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -70,6 +70,10 @@ android {
   }
 
   buildTypes {
+    debug {
+      applicationIdSuffix = ".debug"
+      versionNameSuffix = "-debug"
+    }
     release {
       isMinifyEnabled = false
       signingConfig = signingConfigs.getByName("release")

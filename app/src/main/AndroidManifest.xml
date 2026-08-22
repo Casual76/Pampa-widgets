@@ -4,6 +4,18 @@
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+  <queries>
+    <package android:name="com.spotify.music" />
+    <package android:name="com.google.android.apps.youtube.music" />
+    <package android:name="com.apple.android.music" />
+    <package android:name="com.sec.android.app.music" />
+    <package android:name="com.amazon.mp3" />
+    <package android:name="deezer.android.app" />
+    <package android:name="com.aspiro.tidal" />
+    <package android:name="com.soundcloud.android" />
+    <package android:name="org.videolan.vlc" />
+  </queries>
+
   <application
     android:name=".PampaWidgetsApp"
     android:allowBackup="true"

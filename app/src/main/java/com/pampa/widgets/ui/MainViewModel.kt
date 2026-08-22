@@ -21,7 +21,8 @@ import com.pampa.widgets.core.widget.WidgetPinResult
 import com.pampa.widgets.core.widget.WidgetPinService
 import com.pampa.widgets.core.widget.WidgetRegistry
 import com.pampa.widgets.core.widget.filterAndSortWidgets
-import com.pampa.widgets.widget.media.MediaWidgetUpdater
+import com.pampa.widgets.widget.media.MediaWidgetUpdateCoordinator
+import com.pampa.widgets.widget.media.MediaWidgetUpdateReason
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -137,49 +138,49 @@ class MainViewModel @Inject constructor(
   fun setMediaWidgetTheme(theme: MediaWidgetTheme) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetTheme(theme)
-      MediaWidgetUpdater.updateAll(context)
+      MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Settings)
     }
   }
 
   fun setMediaWidgetArtworkSize(size: MediaWidgetArtworkSize) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetArtworkSize(size)
-      MediaWidgetUpdater.updateAll(context)
+      MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Settings)
     }
   }
 
   fun setMediaWidgetShowSource(enabled: Boolean) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetShowSource(enabled)
-      MediaWidgetUpdater.updateAll(context)
+      MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Settings)
     }
   }
 
   fun setMediaWidgetShowArtist(enabled: Boolean) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetShowArtist(enabled)
-      MediaWidgetUpdater.updateAll(context)
+      MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Settings)
     }
   }
 
   fun setMediaWidgetKeepLastSong(enabled: Boolean) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetKeepLastSong(enabled)
-      MediaWidgetUpdater.updateAll(context)
+      MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Settings)
     }
   }
 
   fun setMediaWidgetInstantControls(enabled: Boolean) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetInstantControls(enabled)
-      MediaWidgetUpdater.updateAll(context)
+      MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Settings)
     }
   }
 
   fun setMediaWidgetAnimatedFeedback(enabled: Boolean) {
     viewModelScope.launch {
       settingsRepository.setMediaWidgetAnimatedFeedback(enabled)
-      MediaWidgetUpdater.updateAll(context)
+      MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Settings)
     }
   }
 

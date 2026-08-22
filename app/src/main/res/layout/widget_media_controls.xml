@@ -184,7 +184,7 @@
         android:textColor="@color/widget_on_surface_variant"
         android:textSize="12sp" />
 
-      <TextView
+      <Chronometer
         android:id="@+id/media_widget_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

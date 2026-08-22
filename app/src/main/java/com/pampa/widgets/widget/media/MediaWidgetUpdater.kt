@@ -17,8 +17,6 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.Gravity
@@ -33,7 +31,6 @@ import com.pampa.widgets.core.media.MediaPlaybackSnapshot
 import com.pampa.widgets.core.media.MediaSessionReader
 import com.pampa.widgets.core.media.NotificationListenerAccess
 import com.pampa.widgets.core.settings.AppSettings
-import com.pampa.widgets.core.settings.AppSettingsSnapshotReader
 import com.pampa.widgets.core.settings.MediaWidgetArtworkSize
 import com.pampa.widgets.core.settings.MediaWidgetTheme
 import kotlin.math.abs
@@ -41,48 +38,64 @@ import kotlin.math.max
 import kotlin.math.min
 
 /** Background render bounds used for launcher-size-specific bitmaps. */
-private const val BackgroundMinPx = 420
-private const val BackgroundMaxPx = 1400
-private const val CommandSettleDelayMs = 110L
-private const val CommandTimeoutMs = 1_600L
-private val CommandResyncDelaysMs = longArrayOf(220L, 600L, 1_100L)
-
-/** A command stays visually stable until the media session confirms its result. */
-private data class PendingMediaCommand(
-  val id: Long,
-  val action: MediaControlAction,
-  val baselineSnapshot: MediaPlaybackSnapshot,
-  val expectedPlaying: Boolean?,
-  val startedAtElapsedMs: Long,
-)
-
-/** The ephemeral state rendered while a command is in flight. */
-private data class MediaWidgetInteraction(
-  val action: MediaControlAction,
-  val showFeedback: Boolean,
-  val expectedPlaying: Boolean?,
-)
+private const val BackgroundMinSidePx = 220
+private const val BackgroundMaxSidePx = 720
 
 /** State owned by this process so a RemoteViews [android.widget.ViewFlipper] can alternate layers. */
 private data class MediaWidgetVisualState(
+  val background: Bitmap,
   val backgroundSignature: String,
   val backgroundSlot: Int,
+  val artwork: Bitmap?,
   val artworkSignature: String,
   val artworkSlot: Int,
   val isPlaying: Boolean,
+  val playPauseSlot: Int,
+  val renderSignature: MediaWidgetRenderSignature,
+)
+
+internal data class MediaWidgetRenderSignature(
+  val availability: MediaPlaybackAvailability,
+  val trackKey: String,
+  val title: String,
+  val artist: String,
+  val sourceLabel: String,
+  val packageName: String,
+  val isPlaying: Boolean,
+  val canPlayPause: Boolean,
+  val canSkipNext: Boolean,
+  val canSkipPrevious: Boolean,
+  val artworkSignature: String,
+  val durationMs: Long,
+  val playbackAnchorSecond: Long,
+  val playbackSpeed: Float,
+  val isFromCache: Boolean,
+  val theme: MediaWidgetTheme,
+  val artworkSize: MediaWidgetArtworkSize,
+  val showSource: Boolean,
+  val showArtist: Boolean,
+  val keepLastSong: Boolean,
+  val instantControls: Boolean,
+  val animatedFeedback: Boolean,
+  val layout: MediaWidgetLayoutSpec,
+  val interaction: MediaWidgetInteraction?,
 )
 
 private data class MediaWidgetVisualPlan(
   val initialize: Boolean,
   val backgroundChanged: Boolean,
+  val animateBackground: Boolean,
+  val previousBackground: Bitmap,
   val targetBackgroundSlot: Int,
   val artworkChanged: Boolean,
+  val animateArtwork: Boolean,
+  val previousArtwork: Bitmap?,
   val targetArtworkSlot: Int,
   val playbackChanged: Boolean,
-) {
-  val hasTransition: Boolean
-    get() = backgroundChanged || artworkChanged || playbackChanged
-}
+  val animatePlayback: Boolean,
+  val previousIsPlaying: Boolean,
+  val targetPlayPauseSlot: Int,
+)
 
 /**
  * Builds the RemoteViews for the Media Controls widget and drives the press feedback
@@ -92,138 +105,26 @@ private data class MediaWidgetVisualPlan(
  * cover frame; its palette is used as a flat tint, never as the card background image.
  */
 object MediaWidgetUpdater {
-  private val mainHandler = Handler(Looper.getMainLooper())
   private val stateLock = Any()
-  private var nextCommandId = 0L
-  private var pendingCommand: PendingMediaCommand? = null
   private val visualStates = mutableMapOf<Int, MediaWidgetVisualState>()
 
-  fun updateAll(context: Context) {
+  internal fun renderAll(
+    context: Context,
+    snapshot: MediaPlaybackSnapshot,
+    settings: AppSettings,
+    interaction: MediaWidgetInteraction? = null,
+  ) {
     val appContext = context.applicationContext
     val appWidgetManager = AppWidgetManager.getInstance(appContext)
     val component = ComponentName(appContext, MediaWidgetProvider::class.java)
     val widgetIds = appWidgetManager.getAppWidgetIds(component)
-    update(appContext, appWidgetManager, widgetIds)
-  }
-
-  fun update(
-    context: Context,
-    appWidgetManager: AppWidgetManager,
-    appWidgetIds: IntArray,
-  ) {
-    if (appWidgetIds.isEmpty()) return
-    val settings = AppSettingsSnapshotReader.readBlocking(context)
-    val snapshot = MediaSessionReader.readSnapshot(
-      context = context,
-      keepLastSong = settings.mediaWidgetKeepLastSong,
-    )
-    if (shouldHoldCurrentVisualState(snapshot)) return
-    updateWithSnapshot(context, appWidgetManager, appWidgetIds, snapshot, settings)
-  }
-
-  fun feedbackSnapshot(context: Context, action: MediaControlAction): MediaPlaybackSnapshot? {
-    val settings = AppSettingsSnapshotReader.readBlocking(context.applicationContext)
-    val snapshot = MediaSessionReader.readSnapshot(
-      context = context.applicationContext,
-      keepLastSong = settings.mediaWidgetKeepLastSong,
-    )
-    return snapshot.takeIf { it.canHandle(action) }
-  }
-
-  fun afterMediaControl(
-    context: Context,
-    action: MediaControlAction,
-    feedbackSnapshot: MediaPlaybackSnapshot? = null,
-    commandDispatched: Boolean,
-  ) {
-    val appContext = context.applicationContext
-    val settings = AppSettingsSnapshotReader.readBlocking(appContext)
-    val baseline = feedbackSnapshot ?: MediaSessionReader.readSnapshot(
-      context = appContext,
-      keepLastSong = settings.mediaWidgetKeepLastSong,
-    )
-    if (!commandDispatched || !baseline.canHandle(action)) {
-      updateAll(appContext)
-      return
-    }
-
-    val command = synchronized(stateLock) {
-      PendingMediaCommand(
-        id = ++nextCommandId,
-        action = action,
-        baselineSnapshot = baseline,
-        expectedPlaying = if (action == MediaControlAction.TogglePlayPause) !baseline.isPlaying else null,
-        startedAtElapsedMs = SystemClock.elapsedRealtime(),
-      ).also { pendingCommand = it }
-    }
-    val showFeedback = settings.mediaWidgetAnimatedFeedback || settings.mediaWidgetInstantControls
-    updateAllWithSnapshot(
-      context = appContext,
-      snapshot = baseline,
-      settings = settings,
-      interaction = MediaWidgetInteraction(
-        action = action,
-        showFeedback = showFeedback,
-        expectedPlaying = command.expectedPlaying,
-      ),
-    )
-    scheduleCommandResolution(appContext, command)
+    updateWithSnapshot(appContext, appWidgetManager, widgetIds, snapshot, settings, interaction)
   }
 
   fun onDeleted(appWidgetIds: IntArray) {
     synchronized(stateLock) {
       appWidgetIds.forEach(visualStates::remove)
     }
-  }
-
-  private fun shouldHoldCurrentVisualState(snapshot: MediaPlaybackSnapshot): Boolean {
-    val command = synchronized(stateLock) { pendingCommand } ?: return false
-    val elapsed = SystemClock.elapsedRealtime() - command.startedAtElapsedMs
-    val confirmed = snapshot.confirms(command)
-    return when {
-      confirmed || snapshot.availability == MediaPlaybackAvailability.PermissionRequired || elapsed >= CommandTimeoutMs -> {
-        clearPendingCommand(command.id)
-        false
-      }
-      else -> true
-    }
-  }
-
-  private fun scheduleCommandResolution(context: Context, command: PendingMediaCommand) {
-    mainHandler.postDelayed({ settlePressVisual(context, command.id) }, CommandSettleDelayMs)
-    CommandResyncDelaysMs.forEach { delayMs ->
-      mainHandler.postDelayed({
-        if (isCommandPending(command.id)) updateAll(context)
-      }, delayMs)
-    }
-    mainHandler.postDelayed({
-      if (clearPendingCommand(command.id)) updateAll(context)
-    }, CommandTimeoutMs)
-  }
-
-  private fun settlePressVisual(context: Context, commandId: Long) {
-    val command = synchronized(stateLock) { pendingCommand }?.takeIf { it.id == commandId } ?: return
-    val appWidgetManager = AppWidgetManager.getInstance(context)
-    val component = ComponentName(context, MediaWidgetProvider::class.java)
-    val widgetIds = appWidgetManager.getAppWidgetIds(component)
-    widgetIds.forEach { widgetId ->
-      val partialViews = RemoteViews(context.packageName, R.layout.widget_media_controls)
-      when (command.action) {
-        MediaControlAction.TogglePlayPause -> partialViews.setScale(R.id.media_widget_play_pause_container, 1f)
-        MediaControlAction.Next -> partialViews.setScale(R.id.media_widget_next, 1f)
-        MediaControlAction.Previous -> partialViews.setScale(R.id.media_widget_previous, 1f)
-      }
-      appWidgetManager.partiallyUpdateAppWidget(widgetId, partialViews)
-    }
-  }
-
-  private fun isCommandPending(commandId: Long): Boolean =
-    synchronized(stateLock) { pendingCommand?.id == commandId }
-
-  private fun clearPendingCommand(commandId: Long): Boolean = synchronized(stateLock) {
-    if (pendingCommand?.id != commandId) return@synchronized false
-    pendingCommand = null
-    true
   }
 
   internal fun buildRemoteViewsForTest(
@@ -248,25 +149,20 @@ object MediaWidgetUpdater {
       visualPlan = MediaWidgetVisualPlan(
         initialize = true,
         backgroundChanged = false,
+        animateBackground = false,
+        previousBackground = style.background,
         targetBackgroundSlot = 0,
         artworkChanged = false,
+        animateArtwork = false,
+        previousArtwork = snapshot.artwork,
         targetArtworkSlot = 0,
         playbackChanged = false,
+        animatePlayback = false,
+        previousIsPlaying = snapshot.isPlaying,
+        targetPlayPauseSlot = 0,
       ),
       interaction = null,
     )
-  }
-
-  private fun updateAllWithSnapshot(
-    context: Context,
-    snapshot: MediaPlaybackSnapshot,
-    settings: AppSettings,
-    interaction: MediaWidgetInteraction? = null,
-  ) {
-    val appWidgetManager = AppWidgetManager.getInstance(context)
-    val component = ComponentName(context, MediaWidgetProvider::class.java)
-    val widgetIds = appWidgetManager.getAppWidgetIds(component)
-    updateWithSnapshot(context, appWidgetManager, widgetIds, snapshot, settings, interaction)
   }
 
   private fun updateWithSnapshot(
@@ -278,16 +174,35 @@ object MediaWidgetUpdater {
     interaction: MediaWidgetInteraction? = null,
   ) {
     if (appWidgetIds.isEmpty()) return
+    val elapsedRealtimeMs = SystemClock.elapsedRealtime()
     appWidgetIds.forEach { widgetId ->
       val layout = MediaWidgetLayoutSpec.from(appWidgetManager.getAppWidgetOptions(widgetId), settings)
-      val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout)
-      val visualPlan = visualPlanFor(widgetId, snapshot, style)
-      val views = buildRemoteViews(context, snapshot, settings, style, layout, visualPlan, interaction)
-      appWidgetManager.updateAppWidget(widgetId, views)
-      if (visualPlan.hasTransition) {
-        applyVisualTransition(context, appWidgetManager, widgetId, snapshot, style, layout, visualPlan)
+      val renderSignature = mediaWidgetRenderSignature(
+        snapshot = snapshot,
+        settings = settings,
+        layout = layout,
+        interaction = interaction,
+        elapsedRealtimeMs = elapsedRealtimeMs,
+      )
+      val alreadyRendered = synchronized(stateLock) {
+        visualStates[widgetId]?.renderSignature == renderSignature
       }
-      commitVisualState(widgetId, snapshot, style, visualPlan)
+      if (alreadyRendered) return@forEach
+
+      val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout)
+      val visualPlan = visualPlanFor(
+        widgetId = widgetId,
+        snapshot = snapshot,
+        style = style,
+        animateChanges = settings.mediaWidgetAnimatedFeedback,
+      )
+      val views = buildRemoteViews(context, snapshot, settings, style, layout, visualPlan, interaction)
+      if (visualPlan.initialize) {
+        appWidgetManager.updateAppWidget(widgetId, views)
+      } else {
+        appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
+      }
+      commitVisualState(widgetId, snapshot, style, visualPlan, renderSignature)
     }
   }
 
@@ -295,68 +210,62 @@ object MediaWidgetUpdater {
     widgetId: Int,
     snapshot: MediaPlaybackSnapshot,
     style: MediaWidgetStyle,
+    animateChanges: Boolean,
   ): MediaWidgetVisualPlan {
     val previous = synchronized(stateLock) { visualStates[widgetId] }
     if (previous == null) {
       return MediaWidgetVisualPlan(
         initialize = true,
         backgroundChanged = false,
+        animateBackground = false,
+        previousBackground = style.background,
         targetBackgroundSlot = 0,
         artworkChanged = false,
+        animateArtwork = false,
+        previousArtwork = snapshot.artwork,
         targetArtworkSlot = 0,
         playbackChanged = false,
+        animatePlayback = false,
+        previousIsPlaying = snapshot.isPlaying,
+        targetPlayPauseSlot = 0,
       )
     }
     val backgroundChanged = previous.backgroundSignature != style.backgroundSignature
     val artworkChanged = previous.artworkSignature != snapshot.artworkSignature()
+    val playbackChanged = previous.isPlaying != snapshot.isPlaying
+    // RemoteViews ViewFlipper transitions for bitmap-heavy layers briefly expose the
+    // launcher wallpaper on One UI. Keep both slots current and update them atomically;
+    // lightweight playback glyph feedback remains safe to animate.
+    val animateBackground = false
+    val animateArtwork = false
+    val animatePlayback = playbackChanged && animateChanges
     return MediaWidgetVisualPlan(
       initialize = false,
       backgroundChanged = backgroundChanged,
-      targetBackgroundSlot = if (backgroundChanged) 1 - previous.backgroundSlot else previous.backgroundSlot,
+      animateBackground = animateBackground,
+      previousBackground = previous.background,
+      targetBackgroundSlot = if (animateBackground) {
+        1 - previous.backgroundSlot
+      } else {
+        previous.backgroundSlot
+      },
       artworkChanged = artworkChanged,
-      targetArtworkSlot = if (artworkChanged) 1 - previous.artworkSlot else previous.artworkSlot,
-      playbackChanged = previous.isPlaying != snapshot.isPlaying,
+      animateArtwork = animateArtwork,
+      previousArtwork = previous.artwork,
+      targetArtworkSlot = if (animateArtwork) {
+        1 - previous.artworkSlot
+      } else {
+        previous.artworkSlot
+      },
+      playbackChanged = playbackChanged,
+      animatePlayback = animatePlayback,
+      previousIsPlaying = previous.isPlaying,
+      targetPlayPauseSlot = if (animatePlayback) {
+        1 - previous.playPauseSlot
+      } else {
+        previous.playPauseSlot
+      },
     )
-  }
-
-  private fun applyVisualTransition(
-    context: Context,
-    appWidgetManager: AppWidgetManager,
-    widgetId: Int,
-    snapshot: MediaPlaybackSnapshot,
-    style: MediaWidgetStyle,
-    layout: MediaWidgetLayoutSpec,
-    visualPlan: MediaWidgetVisualPlan,
-  ) {
-    val views = RemoteViews(context.packageName, R.layout.widget_media_controls)
-    if (visualPlan.backgroundChanged) {
-      views.setImageViewBitmap(
-        if (visualPlan.targetBackgroundSlot == 0) R.id.media_widget_background else R.id.media_widget_background_next,
-        style.background,
-      )
-      views.setDisplayedChild(R.id.media_widget_background_flipper, visualPlan.targetBackgroundSlot)
-    }
-    if (visualPlan.artworkChanged) {
-      applyArtworkImage(
-        context = context,
-        views = views,
-        imageViewId = if (visualPlan.targetArtworkSlot == 0) {
-          R.id.media_widget_artwork
-        } else {
-          R.id.media_widget_artwork_next
-        },
-        snapshot = snapshot,
-        layout = layout,
-      )
-      views.setDisplayedChild(R.id.media_widget_artwork_flipper, visualPlan.targetArtworkSlot)
-    }
-    if (visualPlan.playbackChanged) {
-      views.setDisplayedChild(
-        R.id.media_widget_play_pause_glyph_flipper,
-        if (snapshot.isPlaying) 1 else 0,
-      )
-    }
-    appWidgetManager.partiallyUpdateAppWidget(widgetId, views)
   }
 
   private fun commitVisualState(
@@ -364,14 +273,19 @@ object MediaWidgetUpdater {
     snapshot: MediaPlaybackSnapshot,
     style: MediaWidgetStyle,
     visualPlan: MediaWidgetVisualPlan,
+    renderSignature: MediaWidgetRenderSignature,
   ) {
     synchronized(stateLock) {
       visualStates[widgetId] = MediaWidgetVisualState(
+        background = style.background,
         backgroundSignature = style.backgroundSignature,
         backgroundSlot = visualPlan.targetBackgroundSlot,
+        artwork = snapshot.artwork,
         artworkSignature = snapshot.artworkSignature(),
         artworkSlot = visualPlan.targetArtworkSlot,
         isPlaying = snapshot.isPlaying,
+        playPauseSlot = visualPlan.targetPlayPauseSlot,
+        renderSignature = renderSignature,
       )
     }
   }
@@ -387,13 +301,12 @@ object MediaWidgetUpdater {
   ): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_media_controls)
 
-    applyBackgroundBaseline(views, style, visualPlan)
+    applyBackground(views, style, visualPlan)
     applyLayout(context, views, style, layout)
     views.setTextViewText(R.id.media_widget_source, snapshot.sourceLabel)
     views.setTextViewText(R.id.media_widget_title, snapshot.title)
     views.setTextViewText(R.id.media_widget_artist, snapshot.artist)
     views.setTextViewText(R.id.media_widget_status, interaction?.statusLabel() ?: snapshot.statusLabel())
-    views.setTextViewText(R.id.media_widget_time, snapshot.timeLabel())
     views.setTextColor(R.id.media_widget_source, style.primaryTextColor)
     views.setTextColor(R.id.media_widget_title, style.primaryTextColor)
     views.setTextColor(R.id.media_widget_artist, style.secondaryTextColor)
@@ -432,8 +345,9 @@ object MediaWidgetUpdater {
     )
 
     applyArtwork(context, views, snapshot, layout, visualPlan)
-    applyControls(context, views, snapshot, style, layout, visualPlan, interaction)
+    applyControls(context, views, snapshot, settings, style, layout, visualPlan, interaction)
     applyProgress(views, snapshot, style, layout)
+    applyTime(views, snapshot, layout)
 
     val playIntent = if (snapshot.availability == MediaPlaybackAvailability.PermissionRequired) {
       settingsPendingIntent(context)
@@ -462,19 +376,42 @@ object MediaWidgetUpdater {
     )
     views.setOnClickPendingIntent(R.id.media_widget_open_media, openMediaIntent)
     views.setOnClickPendingIntent(R.id.media_widget_open_pampa, mainActivityPendingIntent(context))
-
+    applyAnimatedTransitions(views, visualPlan)
     return views
   }
 
-  private fun applyBackgroundBaseline(
+  private fun applyAnimatedTransitions(
+    views: RemoteViews,
+    visualPlan: MediaWidgetVisualPlan,
+  ) {
+    if (visualPlan.animateBackground) {
+      views.setDisplayedChild(R.id.media_widget_background_flipper, visualPlan.targetBackgroundSlot)
+    }
+    if (visualPlan.animateArtwork) {
+      views.setDisplayedChild(R.id.media_widget_artwork_flipper, visualPlan.targetArtworkSlot)
+    }
+    if (visualPlan.animatePlayback) {
+      views.setDisplayedChild(R.id.media_widget_play_pause_glyph_flipper, visualPlan.targetPlayPauseSlot)
+    }
+  }
+
+  private fun applyBackground(
     views: RemoteViews,
     style: MediaWidgetStyle,
     visualPlan: MediaWidgetVisualPlan,
   ) {
-    if (!visualPlan.initialize) return
-    views.setImageViewBitmap(R.id.media_widget_background, style.background)
-    views.setImageViewBitmap(R.id.media_widget_background_next, style.background)
-    views.setDisplayedChild(R.id.media_widget_background_flipper, 0)
+    val first = if (visualPlan.animateBackground && visualPlan.targetBackgroundSlot != 0) {
+      visualPlan.previousBackground
+    } else {
+      style.background
+    }
+    val second = if (visualPlan.animateBackground && visualPlan.targetBackgroundSlot != 1) {
+      visualPlan.previousBackground
+    } else {
+      style.background
+    }
+    views.setImageViewBitmap(R.id.media_widget_background, first)
+    views.setImageViewBitmap(R.id.media_widget_background_next, second)
   }
 
   private fun applyLayout(
@@ -545,29 +482,30 @@ object MediaWidgetUpdater {
     val artworkDp = layout.artworkDp
     views.setViewLayoutWidth(R.id.media_widget_artwork_frame, artworkDp, TypedValue.COMPLEX_UNIT_DIP)
     views.setViewLayoutHeight(R.id.media_widget_artwork_frame, artworkDp, TypedValue.COMPLEX_UNIT_DIP)
-    // Load the current artwork into the slot that will be displayed after this update.
-    // The other slot is left with its previous content so the flipper crossfade looks correct.
-    // On initialize, both slots are primed to avoid showing an empty view briefly.
-    val primarySlot = if (visualPlan.initialize) R.id.media_widget_artwork else {
-      if (visualPlan.targetArtworkSlot == 0) R.id.media_widget_artwork else R.id.media_widget_artwork_next
+    val first = if (visualPlan.animateArtwork && visualPlan.targetArtworkSlot != 0) {
+      visualPlan.previousArtwork
+    } else {
+      snapshot.artwork
     }
-    applyArtworkImage(context, views, primarySlot, snapshot, layout)
-    if (visualPlan.initialize) {
-      applyArtworkImage(context, views, R.id.media_widget_artwork_next, snapshot, layout)
-      views.setDisplayedChild(R.id.media_widget_artwork_flipper, 0)
+    val second = if (visualPlan.animateArtwork && visualPlan.targetArtworkSlot != 1) {
+      visualPlan.previousArtwork
+    } else {
+      snapshot.artwork
     }
+    applyArtworkImage(context, views, R.id.media_widget_artwork, first, layout)
+    applyArtworkImage(context, views, R.id.media_widget_artwork_next, second, layout)
   }
 
   private fun applyArtworkImage(
     context: Context,
     views: RemoteViews,
     imageViewId: Int,
-    snapshot: MediaPlaybackSnapshot,
+    artwork: Bitmap?,
     layout: MediaWidgetLayoutSpec,
   ) {
-    if (snapshot.artwork != null) {
+    if (artwork != null) {
       views.setViewPadding(imageViewId, 0, 0, 0, 0)
-      views.setImageViewBitmap(imageViewId, snapshot.artwork.roundedSquare())
+      views.setImageViewBitmap(imageViewId, artwork.roundedSquare())
     } else {
       val padding = context.dp((layout.artworkDp * 0.18f).toInt().coerceAtLeast(10))
       views.setViewPadding(imageViewId, padding, padding, padding, padding)
@@ -579,6 +517,7 @@ object MediaWidgetUpdater {
     context: Context,
     views: RemoteViews,
     snapshot: MediaPlaybackSnapshot,
+    settings: AppSettings,
     style: MediaWidgetStyle,
     layout: MediaWidgetLayoutSpec,
     visualPlan: MediaWidgetVisualPlan,
@@ -637,6 +576,17 @@ object MediaWidgetUpdater {
     views.setImageViewResource(R.id.media_widget_refresh, R.drawable.ic_widget_refresh)
     views.setImageViewResource(R.id.media_widget_open_media, R.drawable.ic_widget_open_app)
     views.setImageViewResource(R.id.media_widget_open_pampa, R.drawable.ic_widget_settings)
+    val currentGlyph = if (snapshot.isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
+    if (visualPlan.animatePlayback) {
+      val previousGlyph = if (visualPlan.previousIsPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play
+      val firstGlyph = if (visualPlan.targetPlayPauseSlot == 0) currentGlyph else previousGlyph
+      val secondGlyph = if (visualPlan.targetPlayPauseSlot == 1) currentGlyph else previousGlyph
+      views.setImageViewResource(R.id.media_widget_play_glyph, firstGlyph)
+      views.setImageViewResource(R.id.media_widget_pause_glyph, secondGlyph)
+    } else {
+      views.setImageViewResource(R.id.media_widget_play_glyph, currentGlyph)
+      views.setImageViewResource(R.id.media_widget_pause_glyph, currentGlyph)
+    }
     views.setColorStateList(
       R.id.media_widget_previous,
       "setImageTintList",
@@ -662,10 +612,6 @@ object MediaWidgetUpdater {
       "setIndeterminateTintList",
       ColorStateList.valueOf(style.playIconColor),
     )
-    if (visualPlan.initialize) {
-      views.setDisplayedChild(R.id.media_widget_play_pause_glyph_flipper, if (snapshot.isPlaying) 1 else 0)
-    }
-
     val isTogglePending = commandAction == MediaControlAction.TogglePlayPause && showFeedback
     val isNextPending = commandAction == MediaControlAction.Next && showFeedback
     val isPreviousPending = commandAction == MediaControlAction.Previous && showFeedback
@@ -716,6 +662,60 @@ object MediaWidgetUpdater {
     views.setProgressBar(R.id.media_widget_progress, 1000, progress, false)
   }
 
+  private fun applyTime(
+    views: RemoteViews,
+    snapshot: MediaPlaybackSnapshot,
+    layout: MediaWidgetLayoutSpec,
+  ) {
+    val showTime = layout.showMeta && snapshot.durationMs > 0L
+    views.setViewVisibility(R.id.media_widget_time, if (showTime) View.VISIBLE else View.GONE)
+    if (!showTime) {
+      views.setChronometer(R.id.media_widget_time, SystemClock.elapsedRealtime(), null, false)
+      return
+    }
+    val position = snapshot.positionMs.coerceIn(0L, snapshot.durationMs)
+    val base = SystemClock.elapsedRealtime() - position
+    views.setChronometer(
+      R.id.media_widget_time,
+      base,
+      "%s / ${snapshot.durationMs.clockLabel()}",
+      snapshot.isPlaying,
+    )
+  }
+
+  internal fun buildRemoteViewsSequenceForTest(
+    context: Context,
+    widgetId: Int,
+    snapshot: MediaPlaybackSnapshot,
+    settings: AppSettings,
+    widthDp: Int,
+    heightDp: Int,
+  ): RemoteViews {
+    val layout = MediaWidgetLayoutSpec.fromDimensions(widthDp, heightDp, settings)
+    val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout)
+    val visualPlan = visualPlanFor(
+      widgetId = widgetId,
+      snapshot = snapshot,
+      style = style,
+      animateChanges = settings.mediaWidgetAnimatedFeedback,
+    )
+    val renderSignature = mediaWidgetRenderSignature(
+      snapshot = snapshot,
+      settings = settings,
+      layout = layout,
+      interaction = null,
+      elapsedRealtimeMs = SystemClock.elapsedRealtime(),
+    )
+    return buildRemoteViews(context, snapshot, settings, style, layout, visualPlan, interaction = null)
+      .also {
+        commitVisualState(widgetId, snapshot, style, visualPlan, renderSignature)
+      }
+  }
+
+  internal fun resetVisualStateForTest(widgetId: Int) {
+    synchronized(stateLock) { visualStates.remove(widgetId) }
+  }
+
   private fun broadcastPendingIntent(
     context: Context,
     action: String,
@@ -754,21 +754,19 @@ object MediaWidgetUpdater {
     snapshot: MediaPlaybackSnapshot,
   ): PendingIntent {
     MediaSessionReader.sessionActivity(context)?.let { return it }
-    val launchIntent = snapshot.launchPackageName()
-      .takeIf { it.isNotBlank() }
-      ?.let { packageName -> context.packageManager.getLaunchIntentForPackage(packageName) }
-      ?: Intent(context, MainActivity::class.java)
+    val launchIntent = mediaAppLaunchIntent(context, snapshot)
+      ?: return broadcastPendingIntent(context, MediaWidgetProvider.ActionNoOp, 30)
     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     return PendingIntent.getActivity(
       context,
       30,
       launchIntent,
-      PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
   }
 }
 
-private fun MediaPlaybackSnapshot.launchPackageName(): String {
+internal fun MediaPlaybackSnapshot.launchPackageName(): String {
   if (packageName.isNotBlank()) return packageName
   return when (sourceLabel.trim().lowercase()) {
     "spotify" -> MediaPackages.Spotify
@@ -782,6 +780,53 @@ private fun MediaPlaybackSnapshot.launchPackageName(): String {
     "vlc" -> MediaPackages.VLC
     else -> ""
   }
+}
+
+internal fun mediaAppLaunchIntent(
+  context: Context,
+  snapshot: MediaPlaybackSnapshot,
+): Intent? = snapshot.launchPackageName()
+  .takeIf { it.isNotBlank() }
+  ?.let(context.packageManager::getLaunchIntentForPackage)
+
+internal fun mediaWidgetRenderSignature(
+  snapshot: MediaPlaybackSnapshot,
+  settings: AppSettings,
+  layout: MediaWidgetLayoutSpec,
+  interaction: MediaWidgetInteraction?,
+  elapsedRealtimeMs: Long,
+): MediaWidgetRenderSignature {
+  val playbackAnchorMs = if (snapshot.isPlaying && snapshot.playbackSpeed > 0f) {
+    elapsedRealtimeMs - (snapshot.positionMs / snapshot.playbackSpeed).toLong()
+  } else {
+    snapshot.positionMs
+  }
+  return MediaWidgetRenderSignature(
+    availability = snapshot.availability,
+    trackKey = snapshot.trackKey,
+    title = snapshot.title,
+    artist = snapshot.artist,
+    sourceLabel = snapshot.sourceLabel,
+    packageName = snapshot.packageName,
+    isPlaying = snapshot.isPlaying,
+    canPlayPause = snapshot.canPlayPause,
+    canSkipNext = snapshot.canSkipNext,
+    canSkipPrevious = snapshot.canSkipPrevious,
+    artworkSignature = snapshot.artworkSignature(),
+    durationMs = snapshot.durationMs,
+    playbackAnchorSecond = playbackAnchorMs / 1_000L,
+    playbackSpeed = snapshot.playbackSpeed,
+    isFromCache = snapshot.isFromCache,
+    theme = settings.mediaWidgetTheme,
+    artworkSize = settings.mediaWidgetArtworkSize,
+    showSource = settings.mediaWidgetShowSource,
+    showArtist = settings.mediaWidgetShowArtist,
+    keepLastSong = settings.mediaWidgetKeepLastSong,
+    instantControls = settings.mediaWidgetInstantControls,
+    animatedFeedback = settings.mediaWidgetAnimatedFeedback,
+    layout = layout,
+    interaction = interaction,
+  )
 }
 
 internal enum class MediaWidgetSizeClass {
@@ -938,6 +983,7 @@ internal data class MediaWidgetLayoutSpec(
           MediaWidgetSizeClass.Full -> 3
           MediaWidgetSizeClass.Expanded -> 2
           MediaWidgetSizeClass.Standard -> 2
+          MediaWidgetSizeClass.Compact -> if (heightDp >= 210) 2 else 1
           else -> 1
         },
         sourcePillHeightDp = if (sizeClass == MediaWidgetSizeClass.Full) 24f else 20f,
@@ -980,6 +1026,82 @@ internal data class MediaWidgetLayoutSpec(
   }
 }
 
+internal data class WidgetBitmapSize(val width: Int, val height: Int)
+
+internal fun widgetBackgroundBitmapSize(
+  widthDp: Int,
+  heightDp: Int,
+  density: Float,
+): WidgetBitmapSize {
+  val rawWidth = (widthDp * density).toInt().coerceAtLeast(1)
+  val rawHeight = (heightDp * density).toInt().coerceAtLeast(1)
+  val longest = maxOf(rawWidth, rawHeight)
+  val scale = when {
+    longest > BackgroundMaxSidePx -> BackgroundMaxSidePx.toFloat() / longest
+    longest < BackgroundMinSidePx -> BackgroundMinSidePx.toFloat() / longest
+    else -> 1f
+  }
+  return WidgetBitmapSize(
+    width = (rawWidth * scale).toInt().coerceAtLeast(1),
+    height = (rawHeight * scale).toInt().coerceAtLeast(1),
+  )
+}
+
+internal fun estimatedRemoteViewsBitmapBytes(
+  backgroundSize: WidgetBitmapSize,
+  artworkSidePx: Int = 320,
+): Long = 2L * backgroundSize.width * backgroundSize.height * 4L +
+  2L * artworkSidePx * artworkSidePx * 4L
+
+internal data class MediaWidgetColorTokens(
+  val backgroundColor: Int,
+  val darkSurface: Boolean,
+  val primaryTextColor: Int,
+  val secondaryTextColor: Int,
+  val controlIconColor: Int,
+  val disabledControlIconColor: Int,
+  val playIconColor: Int,
+  val controlSurfaceColor: Int,
+  val disabledControlSurfaceColor: Int,
+  val playSurfaceColor: Int,
+  val sourcePillColor: Int,
+  val artworkFrameColor: Int,
+  val progressColor: Int,
+  val progressTrackColor: Int,
+)
+
+internal fun mediaWidgetColorTokens(
+  accentColor: Int,
+  theme: MediaWidgetTheme,
+): MediaWidgetColorTokens {
+  val accent = accentColor.enrich(0.08f)
+  val background = accent.toWidgetBackgroundColor(theme)
+  val darkSurface = when (theme) {
+    MediaWidgetTheme.DarkGlass -> true
+    MediaWidgetTheme.LightGlass -> false
+    else -> background.luminance() < 0.48f
+  }
+  val controlSurface = background.secondaryControlColor(darkSurface)
+  val disabledControlSurface = background.disabledControlColor(darkSurface)
+  val playSurface = background.playButtonColor(darkSurface)
+  return MediaWidgetColorTokens(
+    backgroundColor = background,
+    darkSurface = darkSurface,
+    primaryTextColor = background.bestContentColor(),
+    secondaryTextColor = background.contentVariantColor(darkSurface),
+    controlIconColor = controlSurface.bestContentColor(),
+    disabledControlIconColor = disabledControlSurface.bestContentColor().blendWith(disabledControlSurface, 0.24f),
+    playIconColor = playSurface.bestContentColor(),
+    controlSurfaceColor = controlSurface,
+    disabledControlSurfaceColor = disabledControlSurface,
+    playSurfaceColor = playSurface,
+    sourcePillColor = background.sourcePillColor(darkSurface),
+    artworkFrameColor = background.artworkFrameColor(darkSurface),
+    progressColor = playSurface,
+    progressTrackColor = controlSurface,
+  )
+}
+
 private data class MediaWidgetStyle(
   val background: Bitmap,
   val backgroundSignature: String,
@@ -1004,44 +1126,30 @@ private data class MediaWidgetStyle(
       layout: MediaWidgetLayoutSpec,
     ): MediaWidgetStyle {
       val palette = extractPalette(artwork)
-      val accent = palette.vibrant.enrich(0.08f)
-      val backgroundColor = accent.toWidgetBackgroundColor(settings.mediaWidgetTheme)
-      val darkSurface = when (settings.mediaWidgetTheme) {
-        MediaWidgetTheme.DarkGlass -> true
-        MediaWidgetTheme.LightGlass -> false
-        else -> backgroundColor.luminance() < 0.48f
-      }
+      val tokens = mediaWidgetColorTokens(palette.vibrant, settings.mediaWidgetTheme)
       val density = context.resources.displayMetrics.density
-      val backgroundWidth = (layout.widthDp * density).toInt().coerceIn(BackgroundMinPx, BackgroundMaxPx)
-      val backgroundHeight = (layout.heightDp * density).toInt().coerceIn(BackgroundMinPx, BackgroundMaxPx)
+      val backgroundSize = widgetBackgroundBitmapSize(layout.widthDp, layout.heightDp, density)
       val background = createBackgroundBitmap(
-        backgroundColor = backgroundColor,
-        width = backgroundWidth,
-        height = backgroundHeight,
-        darkSurface = darkSurface,
+        backgroundColor = tokens.backgroundColor,
+        width = backgroundSize.width,
+        height = backgroundSize.height,
+        darkSurface = tokens.darkSurface,
       )
-      val primary = backgroundColor.bestContentColor()
-      val secondary = backgroundColor.contentVariantColor(darkSurface)
-      val controlSurface = backgroundColor.secondaryControlColor(darkSurface)
-      val disabledControlSurface = backgroundColor.disabledControlColor(darkSurface)
-      val playSurface = backgroundColor.playButtonColor(darkSurface)
-      val sourcePill = backgroundColor.sourcePillColor(darkSurface)
-      val artworkFrame = backgroundColor.artworkFrameColor(darkSurface)
       return MediaWidgetStyle(
         background = background,
-        backgroundSignature = "$backgroundColor:${layout.widthDp}x${layout.heightDp}",
-        primaryTextColor = primary,
-        secondaryTextColor = secondary,
-        controlIconColor = controlSurface.bestContentColor(),
-        disabledControlIconColor = disabledControlSurface.bestContentColor().blendWith(disabledControlSurface, 0.24f),
-        playIconColor = playSurface.bestContentColor(),
-        controlSurfaceColor = controlSurface,
-        disabledControlSurfaceColor = disabledControlSurface,
-        playSurfaceColor = playSurface,
-        sourcePillColor = sourcePill,
-        artworkFrameColor = artworkFrame,
-        progressColor = playSurface,
-        progressTrackColor = controlSurface,
+        backgroundSignature = "${tokens.backgroundColor}:${layout.widthDp}x${layout.heightDp}",
+        primaryTextColor = tokens.primaryTextColor,
+        secondaryTextColor = tokens.secondaryTextColor,
+        controlIconColor = tokens.controlIconColor,
+        disabledControlIconColor = tokens.disabledControlIconColor,
+        playIconColor = tokens.playIconColor,
+        controlSurfaceColor = tokens.controlSurfaceColor,
+        disabledControlSurfaceColor = tokens.disabledControlSurfaceColor,
+        playSurfaceColor = tokens.playSurfaceColor,
+        sourcePillColor = tokens.sourcePillColor,
+        artworkFrameColor = tokens.artworkFrameColor,
+        progressColor = tokens.progressColor,
+        progressTrackColor = tokens.progressTrackColor,
       )
     }
 
@@ -1215,40 +1323,8 @@ private fun MediaWidgetInteraction.statusLabel(): String =
     MediaControlAction.Previous -> "Torno al brano precedente…"
   }
 
-private fun MediaPlaybackSnapshot.canHandle(action: MediaControlAction): Boolean =
-  when (action) {
-    MediaControlAction.TogglePlayPause -> canPlayPause
-    MediaControlAction.Next -> canSkipNext
-    MediaControlAction.Previous -> canSkipPrevious
-  }
-
-private fun MediaPlaybackSnapshot.confirms(command: PendingMediaCommand): Boolean {
-  if (availability != MediaPlaybackAvailability.Active) return false
-  return when (command.action) {
-    MediaControlAction.TogglePlayPause -> isPlaying == command.expectedPlaying
-    MediaControlAction.Next,
-    MediaControlAction.Previous -> {
-      val currentTrack = trackSignature()
-      currentTrack.isNotBlank() && currentTrack != command.baselineSnapshot.trackSignature()
-    }
-  }
-}
-
-private fun MediaPlaybackSnapshot.trackSignature(): String =
-  if (packageName.isBlank() && title.isBlank() && artist.isBlank()) {
-    ""
-  } else {
-    listOf(packageName, title, artist).joinToString("|")
-  }
-
 private fun MediaPlaybackSnapshot.artworkSignature(): String =
-  "${trackSignature()}|${artwork?.width ?: 0}x${artwork?.height ?: 0}"
-
-private fun MediaPlaybackSnapshot.timeLabel(): String {
-  if (durationMs <= 0L) return ""
-  val position = positionMs.coerceIn(0L, durationMs)
-  return "${position.clockLabel()} / ${durationMs.clockLabel()}"
-}
+  "$trackKey|${artworkKey.ifBlank { artwork?.widgetContentSignature().orEmpty() }}|${artwork != null}"
 
 private fun Long.clockLabel(): String {
   val totalSeconds = (this / 1000L).coerceAtLeast(0L)
@@ -1289,6 +1365,19 @@ private fun Bitmap.roundedSquare(): Bitmap {
   canvas.drawBitmap(this, source, rect, paint)
   paint.xfermode = null
   return output
+}
+
+private fun Bitmap.widgetContentSignature(): String {
+  var hash = 1125899906842597L
+  val samples = 6
+  repeat(samples) { yIndex ->
+    repeat(samples) { xIndex ->
+      val x = ((width - 1) * xIndex / (samples - 1)).coerceAtLeast(0)
+      val y = ((height - 1) * yIndex / (samples - 1)).coerceAtLeast(0)
+      hash = hash * 31L + getPixel(x, y)
+    }
+  }
+  return "${width}x$height:${hash.toULong().toString(16)}"
 }
 
 internal fun Int.luminance(): Float =

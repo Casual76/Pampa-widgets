@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import com.pampa.widgets.core.media.MediaControlAction
-import com.pampa.widgets.core.media.MediaSessionReader
 
 class MediaWidgetProvider : AppWidgetProvider() {
   override fun onUpdate(
@@ -14,7 +13,7 @@ class MediaWidgetProvider : AppWidgetProvider() {
     appWidgetManager: AppWidgetManager,
     appWidgetIds: IntArray,
   ) {
-    MediaWidgetUpdater.update(context, appWidgetManager, appWidgetIds)
+    MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.WidgetLifecycle)
   }
 
   override fun onAppWidgetOptionsChanged(
@@ -24,11 +23,11 @@ class MediaWidgetProvider : AppWidgetProvider() {
     newOptions: Bundle,
   ) {
     super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
-    MediaWidgetUpdater.update(context, appWidgetManager, intArrayOf(appWidgetId))
+    MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.Resize)
   }
 
   override fun onDeleted(context: Context, appWidgetIds: IntArray) {
-    MediaWidgetUpdater.onDeleted(appWidgetIds)
+    MediaWidgetUpdateCoordinator.onWidgetsDeleted(appWidgetIds)
     super.onDeleted(context, appWidgetIds)
   }
 
@@ -36,26 +35,25 @@ class MediaWidgetProvider : AppWidgetProvider() {
     super.onReceive(context, intent)
     when (intent.action) {
       ActionTogglePlayPause -> {
-        val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.TogglePlayPause)
-        val dispatched = MediaSessionReader.dispatch(context, MediaControlAction.TogglePlayPause)
-        MediaWidgetUpdater.afterMediaControl(
-          context,
-          MediaControlAction.TogglePlayPause,
-          feedbackSnapshot,
-          dispatched,
-        )
+        val pendingResult = goAsync()
+        MediaWidgetUpdateCoordinator.dispatchControl(context, MediaControlAction.TogglePlayPause) {
+          pendingResult.finish()
+        }
       }
       ActionNext -> {
-        val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.Next)
-        val dispatched = MediaSessionReader.dispatch(context, MediaControlAction.Next)
-        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Next, feedbackSnapshot, dispatched)
+        val pendingResult = goAsync()
+        MediaWidgetUpdateCoordinator.dispatchControl(context, MediaControlAction.Next) {
+          pendingResult.finish()
+        }
       }
       ActionPrevious -> {
-        val feedbackSnapshot = MediaWidgetUpdater.feedbackSnapshot(context, MediaControlAction.Previous)
-        val dispatched = MediaSessionReader.dispatch(context, MediaControlAction.Previous)
-        MediaWidgetUpdater.afterMediaControl(context, MediaControlAction.Previous, feedbackSnapshot, dispatched)
+        val pendingResult = goAsync()
+        MediaWidgetUpdateCoordinator.dispatchControl(context, MediaControlAction.Previous) {
+          pendingResult.finish()
+        }
       }
-      ActionRefresh -> MediaWidgetUpdater.updateAll(context)
+      ActionRefresh -> MediaWidgetUpdateCoordinator.requestUpdate(context, MediaWidgetUpdateReason.ManualRefresh)
+      ActionNoOp -> Unit
     }
   }
 
@@ -64,5 +62,6 @@ class MediaWidgetProvider : AppWidgetProvider() {
     const val ActionNext = "com.pampa.widgets.widget.media.action.NEXT"
     const val ActionPrevious = "com.pampa.widgets.widget.media.action.PREVIOUS"
     const val ActionRefresh = "com.pampa.widgets.widget.media.action.REFRESH"
+    const val ActionNoOp = "com.pampa.widgets.widget.media.action.NO_OP"
   }
 }

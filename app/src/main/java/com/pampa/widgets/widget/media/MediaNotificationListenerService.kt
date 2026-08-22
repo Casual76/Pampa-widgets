@@ -16,23 +16,23 @@ class MediaNotificationListenerService : NotificationListenerService() {
 
   private val controllerCallback = object : MediaController.Callback() {
     override fun onPlaybackStateChanged(state: android.media.session.PlaybackState?) {
-      MediaWidgetUpdater.updateAll(applicationContext)
+      MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
     }
 
     override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {
-      MediaWidgetUpdater.updateAll(applicationContext)
+      MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
     }
 
     override fun onSessionDestroyed() {
       refreshObservedController()
-      MediaWidgetUpdater.updateAll(applicationContext)
+      MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
     }
   }
 
   private val activeSessionsChangedListener =
     MediaSessionManager.OnActiveSessionsChangedListener {
       refreshObservedController()
-      MediaWidgetUpdater.updateAll(applicationContext)
+      MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
     }
 
   override fun onCreate() {
@@ -44,27 +44,27 @@ class MediaNotificationListenerService : NotificationListenerService() {
     super.onListenerConnected()
     registerSessionCallback()
     refreshObservedController()
-    MediaWidgetUpdater.updateAll(applicationContext)
+    MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
   }
 
   override fun onListenerDisconnected() {
     clearObservedController()
     unregisterSessionCallback()
-    MediaWidgetUpdater.updateAll(applicationContext)
+    MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
     super.onListenerDisconnected()
   }
 
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
     if (sbn?.isRelevantMediaSignal() == true) {
       refreshObservedController()
-      MediaWidgetUpdater.updateAll(applicationContext)
+      MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
     }
   }
 
   override fun onNotificationRemoved(sbn: StatusBarNotification?) {
     if (sbn?.isRelevantMediaSignal() == true) {
       refreshObservedController()
-      MediaWidgetUpdater.updateAll(applicationContext)
+      MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.MediaSignal)
     }
   }
 

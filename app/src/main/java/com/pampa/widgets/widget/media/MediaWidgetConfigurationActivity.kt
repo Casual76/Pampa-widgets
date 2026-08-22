@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -108,7 +109,7 @@ class MediaWidgetConfigurationActivity : ComponentActivity() {
   }
 
   private fun finishConfiguration() {
-    MediaWidgetUpdater.updateAll(this)
+    MediaWidgetUpdateCoordinator.requestUpdate(this, MediaWidgetUpdateReason.Settings)
     val result = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
     setResult(RESULT_OK, result)
     finish()
@@ -255,23 +256,19 @@ private fun MediaWidgetConfigurationScreen(
 
 @Composable
 private fun WidgetPreview(settings: AppSettings) {
-  val accent = when (settings.mediaWidgetTheme) {
+  val seed = when (settings.mediaWidgetTheme) {
     MediaWidgetTheme.AlbumColor -> MaterialTheme.colorScheme.primary
     MediaWidgetTheme.AdaptiveGlass -> MaterialTheme.colorScheme.secondary
-    MediaWidgetTheme.DarkGlass -> Color(0xFF202722)
     else -> MaterialTheme.colorScheme.tertiary
-  }
-  val dark = settings.mediaWidgetTheme == MediaWidgetTheme.DarkGlass
-  val cardColor = if (dark) {
-    Color(0xFF1B211E)
-  } else {
-    MaterialTheme.colorScheme.surfaceContainerHigh
-  }
-  val textColor = if (dark) Color.White else MaterialTheme.colorScheme.onSurface
-  val secondaryTextColor = if (dark) Color(0xFFE0EBE4) else MaterialTheme.colorScheme.onSurfaceVariant
-  val previewControlSurface = if (dark) Color(0xFF303B34) else MaterialTheme.colorScheme.surfaceContainerHighest
-  val previewProgressTrack = if (dark) Color(0xFF3A463F) else MaterialTheme.colorScheme.surfaceVariant
-  val previewProgress = if (dark) Color(0xFFE6F2EA) else MaterialTheme.colorScheme.onSurface
+  }.toArgb()
+  val tokens = mediaWidgetColorTokens(seed, settings.mediaWidgetTheme)
+  val cardColor = Color(tokens.backgroundColor)
+  val textColor = Color(tokens.primaryTextColor)
+  val secondaryTextColor = Color(tokens.secondaryTextColor)
+  val previewControlSurface = Color(tokens.controlSurfaceColor)
+  val previewControlIcon = Color(tokens.controlIconColor)
+  val previewProgressTrack = Color(tokens.progressTrackColor)
+  val previewProgress = Color(tokens.progressColor)
   Surface(
     modifier = Modifier.fillMaxWidth(),
     shape = MaterialTheme.shapes.extraLarge,
@@ -295,14 +292,25 @@ private fun WidgetPreview(settings: AppSettings) {
               },
             )
             .clip(MaterialTheme.shapes.large)
-            .background(accent),
+            .background(Color(tokens.artworkFrameColor)),
           contentAlignment = Alignment.Center,
         ) {
-          Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = Color.White)
+          Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = textColor)
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
           if (settings.mediaWidgetShowSource) {
-            Text("Spotify", style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.Bold)
+            Surface(
+              color = Color(tokens.sourcePillColor),
+              shape = MaterialTheme.shapes.extraLarge,
+            ) {
+              Text(
+                "Spotify",
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = textColor,
+                fontWeight = FontWeight.Bold,
+              )
+            }
           }
           Text(
             "Titolo canzone",
@@ -336,22 +344,36 @@ private fun WidgetPreview(settings: AppSettings) {
 
       Row(
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text("In riproduzione", color = secondaryTextColor, style = MaterialTheme.typography.labelMedium)
+        Text("1:14 / 3:42", color = secondaryTextColor, style = MaterialTheme.typography.labelMedium)
+      }
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        PreviewControlIcon(Icons.Rounded.SkipPrevious, textColor, previewControlSurface)
+        PreviewControlIcon(Icons.Rounded.SkipPrevious, previewControlIcon, previewControlSurface)
         Spacer(Modifier.width(16.dp))
         Box(
           modifier = Modifier
             .size(56.dp)
             .clip(MaterialTheme.shapes.extraLarge)
-            .background(accent),
+            .background(Color(tokens.playSurfaceColor)),
           contentAlignment = Alignment.Center,
         ) {
-          Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = if (dark) Color(0xFF102018) else Color.White, modifier = Modifier.size(32.dp))
+          Icon(
+            Icons.Rounded.PlayArrow,
+            contentDescription = null,
+            tint = Color(tokens.playIconColor),
+            modifier = Modifier.size(32.dp),
+          )
         }
         Spacer(Modifier.width(16.dp))
-        PreviewControlIcon(Icons.Rounded.SkipNext, textColor, previewControlSurface)
+        PreviewControlIcon(Icons.Rounded.SkipNext, previewControlIcon, previewControlSurface)
       }
     }
   }
