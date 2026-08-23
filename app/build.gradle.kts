@@ -113,6 +113,9 @@ kapt {
 }
 
 dependencies {
+  // Fluid Engine: tema, tipografia e componenti condivisi con le altre app.
+  implementation(project(":engine-ui"))
+
   implementation(platform(libs.compose.bom))
   androidTestImplementation(platform(libs.compose.bom))
 
