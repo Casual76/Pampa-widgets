@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "0.3.2",
-      "releaseDate": "2026-08-22",
-      "changelog": "Eliminato il lampeggio del widget durante gli aggiornamenti; corretto il tap che apriva le impostazioni quando Spotify era chiuso; aggiunte animazioni leggere e migliorati sincronizzazione, cache e gestione delle sessioni media.",
-      "releaseTag": "stable-pampa-widgets-v0.3.2",
-      "apkAsset": "pampa-widgets-0.3.2.apk",
+      "version": "0.4.0",
+      "releaseDate": "2026-08-23",
+      "changelog": "Le due schermate sono state ricostruite sul linguaggio condiviso con le altre app: il titolo grande si ritira nella barra mentre scorri, la barra in basso e' in vetro e lascia intravedere il contenuto che le passa sotto, e le liste cedono in fondo invece di fermarsi di colpo. Il conteggio dei widget si e' spostato nella barra, dove compare quando il titolo si ritira. Corretta anche la griglia del catalogo, che su un telefono in verticale schiacciava le schede a meta' schermo troncandone il testo.",
+      "releaseTag": "stable-pampa-widgets-v0.4.0",
+      "apkAsset": "pampa-widgets-0.4.0.apk",
       "exeAsset": "",
-      "sizeBytes": 52460561
+      "sizeBytes": 54301985
     },
     "beta": {
-      "version": "0.3.2",
-      "releaseDate": "2026-08-22",
-      "changelog": "Eliminato il lampeggio del widget durante gli aggiornamenti; corretto il tap che apriva le impostazioni quando Spotify era chiuso; aggiunte animazioni leggere e migliorati sincronizzazione, cache e gestione delle sessioni media.",
-      "releaseTag": "stable-pampa-widgets-v0.3.2",
-      "apkAsset": "pampa-widgets-0.3.2.apk",
+      "version": "0.4.0",
+      "releaseDate": "2026-08-23",
+      "changelog": "Le due schermate sono state ricostruite sul linguaggio condiviso con le altre app: il titolo grande si ritira nella barra mentre scorri, la barra in basso e' in vetro e lascia intravedere il contenuto che le passa sotto, e le liste cedono in fondo invece di fermarsi di colpo. Il conteggio dei widget si e' spostato nella barra, dove compare quando il titolo si ritira. Corretta anche la griglia del catalogo, che su un telefono in verticale schiacciava le schede a meta' schermo troncandone il testo.",
+      "releaseTag": "stable-pampa-widgets-v0.4.0",
+      "apkAsset": "pampa-widgets-0.4.0.apk",
       "exeAsset": "",
-      "sizeBytes": 52460561
+      "sizeBytes": 54301985
     },
     "history": [
+      {
+        "version": "0.3.2",
+        "releaseDate": "2026-08-22",
+        "changelog": "Eliminato il lampeggio del widget durante gli aggiornamenti; corretto il tap che apriva le impostazioni quando Spotify era chiuso; aggiunte animazioni leggere e migliorati sincronizzazione, cache e gestione delle sessioni media.",
+        "releaseTag": "stable-pampa-widgets-v0.3.2",
+        "apkAsset": "pampa-widgets-0.3.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 52460561
+      },
       {
         "version": "0.3.1",
         "releaseDate": "2026-07-29",
