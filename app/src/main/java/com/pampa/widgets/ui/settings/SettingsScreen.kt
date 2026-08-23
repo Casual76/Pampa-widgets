@@ -8,12 +8,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.DarkMode
@@ -51,6 +49,7 @@ import com.pampa.widgets.core.settings.WidgetSortMode
 import com.pampa.widgets.core.update.AppUpdateInstallState
 import com.pampa.widgets.core.update.isBusy
 import com.pampa.widgets.ui.MainUiState
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 
 @Composable
 fun SettingsScreen(
@@ -66,28 +65,14 @@ fun SettingsScreen(
   mediaNotificationAccessGranted: Boolean,
   onOpenMediaAccessSettings: () -> Unit,
 ) {
-  LazyColumn(
-    modifier = Modifier
-      .fillMaxSize()
-      .padding(horizontal = 20.dp)
-      .testTag("settings-screen"),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
+  // Il titolo non e' piu' una voce della lista: lo tiene FluidScreen, che lo fa ritirare nella
+  // barra mentre si scorre invece di lasciarlo scorrere via. La barra e' in vetro e il bordo in
+  // fondo cede: sono le tre cose che arrivano dal componente e non dal tema.
+  FluidScreen(
+    modifier = Modifier.testTag("settings-screen"),
+    title = "Impostazioni",
+    subtitle = "Infrastruttura pronta per catalogo, aggiornamenti e widget futuri.",
   ) {
-    item {
-      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-          text = "Impostazioni",
-          style = MaterialTheme.typography.headlineLarge,
-          fontWeight = FontWeight.Bold,
-        )
-        Text(
-          text = "Infrastruttura pronta per catalogo, aggiornamenti e widget futuri.",
-          style = MaterialTheme.typography.bodyLarge,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-    }
 
     item {
       UpdateSection(

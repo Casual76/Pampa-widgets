@@ -5,18 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -54,6 +49,8 @@ import com.pampa.widgets.core.update.AppUpdateInstallState
 import com.pampa.widgets.core.update.isBusy
 import com.pampa.widgets.core.widget.WidgetDefinition
 import com.pampa.widgets.ui.MainUiState
+import androidx.compose.foundation.lazy.LazyListScope
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 
 @Composable
 fun StoreScreen(
@@ -65,81 +62,89 @@ fun StoreScreen(
   onInstallUpdate: () -> Unit,
   onDismissUpdate: () -> Unit,
 ) {
-  Column(
-    modifier = Modifier
-      .fillMaxSize()
-      .padding(horizontal = 20.dp, vertical = 16.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp),
+  // Il conteggio dei widget passa da una pastiglia accanto al titolo a una faccetta della barra:
+  // FluidScreen le fa scorrere una dopo l'altra quando il titolo grande si e' ritirato, quindi
+  // l'informazione resta raggiungibile senza occupare spazio nella pagina.
+  FluidScreen(
+    modifier = Modifier.testTag("store-screen"),
+    title = "Pampa Widgets",
+    subtitle = "Store locale per widget di sistema creati da te.",
+    titleFacets = listOf("${uiState.widgets.size} widget"),
+    itemSpacing = 18.dp,
   ) {
-    Header(totalWidgets = uiState.widgets.size)
-
     if (uiState.availableUpdate != null && !uiState.isUpdateDismissedForSession) {
-      UpdateBanner(
-        version = uiState.availableUpdate.version,
-        installState = uiState.updateInstallState,
-        onInstall = onInstallUpdate,
-        onDismiss = onDismissUpdate,
+      item(key = "update-banner") {
+        UpdateBanner(
+          version = uiState.availableUpdate.version,
+          installState = uiState.updateInstallState,
+          onInstall = onInstallUpdate,
+          onDismiss = onDismissUpdate,
+        )
+      }
+    }
+
+    item(key = "controls") {
+      StoreControls(
+        query = uiState.searchQuery,
+        layout = uiState.settings.storeLayout,
+        sortMode = uiState.settings.widgetSortMode,
+        onSearchQueryChange = onSearchQueryChange,
+        onStoreLayoutChange = onStoreLayoutChange,
+        onWidgetSortModeChange = onWidgetSortModeChange,
       )
     }
 
-    StoreControls(
-      query = uiState.searchQuery,
-      layout = uiState.settings.storeLayout,
-      sortMode = uiState.settings.widgetSortMode,
-      onSearchQueryChange = onSearchQueryChange,
-      onStoreLayoutChange = onStoreLayoutChange,
-      onWidgetSortModeChange = onWidgetSortModeChange,
-    )
-
     if (uiState.visibleWidgets.isEmpty()) {
-      EmptyStoreState(
-        query = uiState.searchQuery,
-        totalWidgets = uiState.widgets.size,
-        modifier = Modifier
-          .weight(1f)
-          .fillMaxWidth()
-          .testTag("store-empty-state"),
-      )
+      item(key = "empty") {
+        EmptyStoreState(
+          query = uiState.searchQuery,
+          totalWidgets = uiState.widgets.size,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("store-empty-state"),
+        )
+      }
     } else {
-      WidgetList(
+      widgetItems(
         widgets = uiState.visibleWidgets,
         layout = uiState.settings.storeLayout,
         onWidgetClick = onWidgetClick,
-        modifier = Modifier.weight(1f),
       )
     }
   }
 }
 
-@Composable
-private fun Header(totalWidgets: Int) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(
-        text = "Pampa Widgets",
-        style = MaterialTheme.typography.headlineLarge,
-        fontWeight = FontWeight.Bold,
-      )
-      Text(
-        text = "Store locale per widget di sistema creati da te.",
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
+/**
+ * I widget, emessi nella lista della schermata invece che in una lista propria.
+ *
+ * Una lista dentro un'altra lista non scorre: la interna prende il gesto e la pagina resta ferma,
+ * quindi il titolo grande non si ritira mai e il bordo elastico non si sente. La griglia diventa
+ * righe di due, che e' quello che l'adattiva faceva comunque a queste larghezze.
+ */
+private fun LazyListScope.widgetItems(
+  widgets: List<WidgetDefinition>,
+  layout: StoreLayout,
+  onWidgetClick: (String) -> Unit,
+) {
+  when (layout) {
+    StoreLayout.Grid -> {
+      val rows = widgets.chunked(2)
+      items(rows, key = { row -> row.first().id }) { row ->
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+          row.forEach { widget ->
+            Box(modifier = Modifier.weight(1f)) {
+              WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
+            }
+          }
+          // Tiene la sola card di una riga dispari larga quanto le altre invece di farla
+          // allargare su tutta la riga.
+          if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+        }
+      }
     }
-    Surface(
-      shape = CircleShape,
-      color = MaterialTheme.colorScheme.primaryContainer,
-      contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    ) {
-      Text(
-        text = totalWidgets.toString(),
-        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-      )
+
+    StoreLayout.List -> items(widgets, key = { it.id }) { widget ->
+      WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
     }
   }
 }
@@ -303,37 +308,6 @@ private fun EmptyStoreState(
         },
         leadingIcon = { Icon(Icons.Rounded.Widgets, contentDescription = null, modifier = Modifier.size(18.dp)) },
       )
-    }
-  }
-}
-
-@Composable
-private fun WidgetList(
-  widgets: List<WidgetDefinition>,
-  layout: StoreLayout,
-  onWidgetClick: (String) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  when (layout) {
-    StoreLayout.Grid -> LazyVerticalGrid(
-      columns = GridCells.Adaptive(minSize = 280.dp),
-      modifier = modifier.fillMaxWidth(),
-      contentPadding = PaddingValues(bottom = 24.dp),
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      items(widgets, key = { it.id }) { widget ->
-        WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
-      }
-    }
-    StoreLayout.List -> LazyColumn(
-      modifier = modifier.fillMaxWidth(),
-      contentPadding = PaddingValues(bottom = 24.dp),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      items(widgets, key = { it.id }) { widget ->
-        WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
-      }
     }
   }
 }
