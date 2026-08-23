@@ -51,6 +51,7 @@ import com.pampa.widgets.core.widget.WidgetDefinition
 import com.pampa.widgets.ui.MainUiState
 import androidx.compose.foundation.lazy.LazyListScope
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import androidx.compose.ui.platform.LocalConfiguration
 
 @Composable
 fun StoreScreen(
@@ -65,6 +66,15 @@ fun StoreScreen(
   // Il conteggio dei widget passa da una pastiglia accanto al titolo a una faccetta della barra:
   // FluidScreen le fa scorrere una dopo l'altra quando il titolo grande si e' ritirato, quindi
   // l'informazione resta raggiungibile senza occupare spazio nella pagina.
+  // Quante colonne stanno davvero nella larghezza, con la stessa regola di GridCells.Adaptive:
+  // (larghezza + spazio) / (minimo + spazio), almeno una. Su un telefono in verticale fa **una**,
+  // non due: fissarle a due schiacciava l'unica card a meta' schermo con il titolo troncato.
+  val available = LocalConfiguration.current.screenWidthDp.dp - HorizontalPadding * 2
+  val gridColumns = maxOf(
+    1,
+    ((available + CardSpacing) / (MinimumCardWidth + CardSpacing)).toInt(),
+  )
+
   FluidScreen(
     modifier = Modifier.testTag("store-screen"),
     title = "Pampa Widgets",
@@ -108,6 +118,7 @@ fun StoreScreen(
       widgetItems(
         widgets = uiState.visibleWidgets,
         layout = uiState.settings.storeLayout,
+        columns = gridColumns,
         onWidgetClick = onWidgetClick,
       )
     }
@@ -124,30 +135,33 @@ fun StoreScreen(
 private fun LazyListScope.widgetItems(
   widgets: List<WidgetDefinition>,
   layout: StoreLayout,
+  columns: Int,
   onWidgetClick: (String) -> Unit,
 ) {
-  when (layout) {
-    StoreLayout.Grid -> {
-      val rows = widgets.chunked(2)
-      items(rows, key = { row -> row.first().id }) { row ->
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-          row.forEach { widget ->
-            Box(modifier = Modifier.weight(1f)) {
-              WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
-            }
-          }
-          // Tiene la sola card di una riga dispari larga quanto le altre invece di farla
-          // allargare su tutta la riga.
-          if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+  if (layout == StoreLayout.List || columns <= 1) {
+    items(widgets, key = { it.id }) { widget ->
+      WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
+    }
+    return
+  }
+  val rows = widgets.chunked(columns)
+  items(rows, key = { row -> row.first().id }) { row ->
+    Row(horizontalArrangement = Arrangement.spacedBy(CardSpacing)) {
+      row.forEach { widget ->
+        Box(modifier = Modifier.weight(1f)) {
+          WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
         }
       }
-    }
-
-    StoreLayout.List -> items(widgets, key = { it.id }) { widget ->
-      WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
+      // Tiene le card di una riga incompleta larghe quanto le altre invece di lasciarle
+      // allargare fino a riempire la riga.
+      repeat(columns - row.size) { Spacer(modifier = Modifier.weight(1f)) }
     }
   }
 }
+
+private val MinimumCardWidth = 280.dp
+private val CardSpacing = 12.dp
+private val HorizontalPadding = 20.dp
 
 @Composable
 private fun UpdateBanner(
