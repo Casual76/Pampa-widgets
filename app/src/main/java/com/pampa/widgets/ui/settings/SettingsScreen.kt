@@ -50,6 +50,7 @@ import com.pampa.widgets.core.update.AppUpdateInstallState
 import com.pampa.widgets.core.update.isBusy
 import com.pampa.widgets.ui.MainUiState
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
 
 @Composable
 fun SettingsScreen(
@@ -112,6 +113,12 @@ fun SettingsScreen(
     item {
       AppInfoSection(widgetCount = uiState.widgets.size)
     }
+
+    // Le opere di terze parti che il Fluid Engine porta dentro l'APK — il vetro di Kyant e il font
+    // Inter. Le rispettive licenze chiedono che l'avviso viaggi con la distribuzione, e un file di
+    // licenza in un repository non e' la distribuzione. L'elenco vive nell'engine, cosi' non resta
+    // indietro qui mentre viene aggiornato altrove.
+    fluidLicensesSection()
   }
 }
 
