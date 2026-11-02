@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Il fondo del tema scuro dell'engine (0x0D0D0F): niente finestra chiara prima del primo fotogramma. -->
+  <style name="Theme.PampaWidgets" parent="android:style/Theme.Material.NoActionBar">
+    <item name="android:windowBackground">@color/window_background</item>
+    <item name="android:windowLightStatusBar">false</item>
+    <item name="android:windowLightNavigationBar">false</item>
+    <item name="android:fontFamily">sans</item>
+    <item name="android:colorAccent">#9AD7C2</item>
+  </style>
+</resources>

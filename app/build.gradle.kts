@@ -36,8 +36,8 @@ android {
     applicationId = "com.pampa.widgets"
     minSdk = 31
     targetSdk = 36
-    versionCode = 16
-    versionName = "0.4.1"
+    versionCode = 17
+    versionName = "0.5.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -113,7 +113,9 @@ kapt {
 }
 
 dependencies {
-  // Fluid Engine: tema, tipografia e componenti condivisi con le altre app.
+  // Fluid Engine: tema, tipografia, componenti, pagine e pulsanti condivisi con le altre app.
+  // Il widget e' RemoteViews e non Glance: i colori «Come l'app» li prende da engine-ui
+  // (fluidColorScheme), quindi engine-widget non serve.
   implementation(project(":engine-ui"))
 
   implementation(platform(libs.compose.bom))
@@ -135,10 +137,6 @@ dependencies {
   implementation(libs.compose.material.icons.extended)
   debugImplementation(libs.compose.ui.tooling)
   implementation(libs.compose.ui.tooling.preview)
-
-  implementation(libs.glance)
-  implementation(libs.glance.appwidget)
-  implementation(libs.glance.material3)
 
   implementation(libs.hilt.android)
   kapt(libs.hilt.compiler)

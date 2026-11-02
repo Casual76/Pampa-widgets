@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <!--
+    La finestra prima che Compose disegni: lo stesso fondo del tema chiaro dell'engine (0xF2F2F7),
+    cosi' all'apertura non c'e' un lampo di un altro grigio. Lo scuro sta in values-night.
+  -->
   <style name="Theme.PampaWidgets" parent="android:style/Theme.Material.Light.NoActionBar">
+    <item name="android:windowBackground">@color/window_background</item>
     <item name="android:windowLightStatusBar">true</item>
     <item name="android:windowLightNavigationBar">true</item>
     <item name="android:fontFamily">sans</item>
