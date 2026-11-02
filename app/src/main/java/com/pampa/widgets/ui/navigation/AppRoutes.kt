@@ -2,6 +2,7 @@ package com.pampa.widgets.ui.navigation
 
 object AppRoutes {
   const val Store = "store"
+  const val MyWidgets = "my-widgets"
   const val Settings = "settings"
   const val WidgetDetail = "widget/{widgetId}"
 

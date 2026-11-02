@@ -35,6 +35,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.pampa.widgets.widget.media.ChoiceButtons
+import com.pampa.widgets.widget.media.MediaWidgetPreview
+import com.pampa.widgets.core.settings.MediaWidgetSettings
+import dev.antigravity.fluidengine.ui.fluid.*
+import dev.antigravity.fluidengine.ui.theme.FluidCard
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +65,7 @@ fun StoreScreen(
   onStoreLayoutChange: (StoreLayout) -> Unit,
   onWidgetSortModeChange: (WidgetSortMode) -> Unit,
   onWidgetClick: (String) -> Unit,
+  onPinWidget: (String) -> Unit,
   onInstallUpdate: () -> Unit,
   onDismissUpdate: () -> Unit,
 ) {
@@ -78,7 +84,7 @@ fun StoreScreen(
   FluidScreen(
     modifier = Modifier.testTag("store-screen"),
     title = "Pampa Widgets",
-    subtitle = "Store locale per widget di sistema creati da te.",
+    subtitle = "La tua musica, a portata di home.",
     titleFacets = listOf("${uiState.widgets.size} widget"),
     itemSpacing = 18.dp,
   ) {
@@ -120,6 +126,7 @@ fun StoreScreen(
         layout = uiState.settings.storeLayout,
         columns = gridColumns,
         onWidgetClick = onWidgetClick,
+        onPinWidget = onPinWidget,
       )
     }
   }
@@ -137,10 +144,11 @@ private fun LazyListScope.widgetItems(
   layout: StoreLayout,
   columns: Int,
   onWidgetClick: (String) -> Unit,
+  onPinWidget: (String) -> Unit,
 ) {
   if (layout == StoreLayout.List || columns <= 1) {
     items(widgets, key = { it.id }) { widget ->
-      WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
+      WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) }, onPin = { onPinWidget(widget.id) })
     }
     return
   }
@@ -149,7 +157,7 @@ private fun LazyListScope.widgetItems(
     Row(horizontalArrangement = Arrangement.spacedBy(CardSpacing)) {
       row.forEach { widget ->
         Box(modifier = Modifier.weight(1f)) {
-          WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) })
+          WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) }, onPin = { onPinWidget(widget.id) })
         }
       }
       // Tiene le card di una riga incompleta larghe quanto le altre invece di lasciarle
@@ -189,12 +197,7 @@ private fun UpdateBanner(
           style = MaterialTheme.typography.bodySmall,
         )
       }
-      Button(
-        onClick = onInstall,
-        enabled = !installState.isBusy(),
-      ) {
-        Text("Installa")
-      }
+      FluidButton("Installa", onInstall, enabled = !installState.isBusy())
       IconButton(onClick = onDismiss) {
         Icon(Icons.Rounded.Close, contentDescription = "Nascondi")
       }
@@ -213,55 +216,13 @@ private fun StoreControls(
   onWidgetSortModeChange: (WidgetSortMode) -> Unit,
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    OutlinedTextField(
-      value = query,
-      onValueChange = onSearchQueryChange,
-      modifier = Modifier
-        .fillMaxWidth()
-        .testTag("widget-search"),
-      singleLine = true,
-      leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-      trailingIcon = {
-        if (query.isNotBlank()) {
-          IconButton(onClick = { onSearchQueryChange("") }) {
-            Icon(Icons.Rounded.Close, contentDescription = "Cancella ricerca")
-          }
-        }
-      },
-      label = { Text("Cerca widget") },
-      placeholder = { Text("Multimedia, orologio, sistema...") },
-      shape = MaterialTheme.shapes.large,
-    )
+    FluidTextField(value = query, onValueChange = onSearchQueryChange,
+      modifier = Modifier.fillMaxWidth().testTag("widget-search"),
+      label = "Cerca widget", placeholder = "Musica, orologio, sistema…",
+      leading = { Icon(Icons.Rounded.Search, contentDescription = null) })
 
-    FlowRow(
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      FilterChip(
-        selected = layout == StoreLayout.Grid,
-        onClick = { onStoreLayoutChange(StoreLayout.Grid) },
-        label = { Text("Griglia") },
-        leadingIcon = { Icon(Icons.Rounded.GridView, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-      FilterChip(
-        selected = layout == StoreLayout.List,
-        onClick = { onStoreLayoutChange(StoreLayout.List) },
-        label = { Text("Lista") },
-        leadingIcon = { Icon(Icons.Rounded.ViewAgenda, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-      FilterChip(
-        selected = sortMode == WidgetSortMode.Featured,
-        onClick = { onWidgetSortModeChange(WidgetSortMode.Featured) },
-        label = { Text("In evidenza") },
-        leadingIcon = { Icon(Icons.Rounded.Widgets, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-      FilterChip(
-        selected = sortMode == WidgetSortMode.Name,
-        onClick = { onWidgetSortModeChange(WidgetSortMode.Name) },
-        label = { Text("Nome") },
-        leadingIcon = { Icon(Icons.Rounded.SortByAlpha, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-    }
+    ChoiceButtons(StoreLayout.entries, layout, onStoreLayoutChange) { if (it == StoreLayout.Grid) "Griglia" else "Lista" }
+    ChoiceButtons(WidgetSortMode.entries, sortMode, onWidgetSortModeChange) { if (it == WidgetSortMode.Featured) "In evidenza" else "Nome" }
   }
 }
 
@@ -327,45 +288,17 @@ private fun EmptyStoreState(
 }
 
 @Composable
-private fun WidgetCard(
-  widget: WidgetDefinition,
-  onClick: () -> Unit,
-) {
-  ElevatedCard(
-    onClick = onClick,
-    colors = CardDefaults.elevatedCardColors(
-      containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    ),
-  ) {
-    Row(
-      modifier = Modifier.padding(16.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-      ) {
-        Icon(
-          imageVector = widget.icon ?: Icons.Rounded.Widgets,
-          contentDescription = null,
-          modifier = Modifier
-            .padding(12.dp)
-            .size(28.dp),
-        )
-      }
-      Spacer(Modifier.width(12.dp))
-      Column(modifier = Modifier.weight(1f)) {
-        Text(widget.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(2.dp))
-        Text(
-          widget.shortDescription,
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
+private fun WidgetCard(widget: WidgetDefinition, onClick: () -> Unit, onPin: () -> Unit) {
+  FluidCard(animateContent = false) {
+    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+      Text(widget.name, style = MaterialTheme.typography.titleLarge)
+      MediaWidgetPreview(MediaWidgetSettings())
+      Text("Spotify · Fluidify · Automatica", style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary)
+      Text("Da 2 × 2 a tutta pagina. Sorgente, colori e controlli indipendenti per ogni widget.",
+        style = MaterialTheme.typography.bodyMedium)
+      FluidButton("Aggiungi alla home", onPin, fillWidth = true)
+      FluidButton("Scopri il widget", onClick, style = FluidButtonStyle.Plain, fillWidth = true)
     }
   }
 }

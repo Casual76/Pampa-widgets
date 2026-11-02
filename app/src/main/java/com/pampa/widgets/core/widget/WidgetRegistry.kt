@@ -23,7 +23,7 @@ class LocalWidgetRegistry @Inject constructor() : WidgetRegistry {
     WidgetDefinition(
       id = "media-controls",
       name = "Media Controls",
-      shortDescription = "Controlli multimediali per Spotify, YouTube Music e sessioni Android attive.",
+      shortDescription = "Controlli multimediali per Spotify, Fluidify e sessioni Android attive.",
       category = WidgetCategory.Media,
       sizes = listOf(
         WidgetSize(minColumns = 2, minRows = 2, preferredColumns = 3, preferredRows = 2),
@@ -32,10 +32,11 @@ class LocalWidgetRegistry @Inject constructor() : WidgetRegistry {
       preview = WidgetPreview(
         title = "Traccia in riproduzione",
         subtitle = "Play, pausa, avanti e indietro direttamente dalla home.",
-        accentLabel = "Spotify ready",
+        accentLabel = "Spotify + Fluidify",
       ),
       capabilities = listOf(
         "Spotify",
+        "Fluidify",
         "YouTube Music",
         "Play/Pausa",
         "Traccia successiva",

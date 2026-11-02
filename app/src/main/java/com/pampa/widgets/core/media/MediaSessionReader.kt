@@ -1,18 +1,18 @@
 package com.pampa.widgets.core.media
 
+import com.pampa.widgets.core.settings.MediaSourceMode
+import com.pampa.widgets.core.settings.MediaWidgetSettings
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.SystemClock
-import android.view.KeyEvent
 import com.pampa.widgets.widget.media.MediaNotificationListenerService
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -28,62 +28,68 @@ private const val ArtworkConnectTimeoutMs = 2_000
 private const val ArtworkReadTimeoutMs = 3_000
 
 object MediaSessionReader {
-  /** Reads media and artwork away from the main thread. */
-  suspend fun readSnapshot(
-    context: Context,
-    keepLastSong: Boolean = true,
-  ): MediaPlaybackSnapshot = withContext(Dispatchers.IO) {
-    readSnapshotInternal(context.applicationContext, keepLastSong)
+  suspend fun readSnapshot(context: Context, keepLastSong: Boolean = true,
+    mode: MediaSourceMode = MediaSourceMode.Automatic): MediaPlaybackSnapshot = withContext(Dispatchers.IO) {
+    readSnapshotInternal(context.applicationContext, keepLastSong, mode, supportedControllers(context))
   }
 
-  /** Only for synchronous platform callbacks that cannot be made suspending. */
-  fun readSnapshotBlocking(
-    context: Context,
-    keepLastSong: Boolean = true,
-  ): MediaPlaybackSnapshot = runBlocking(Dispatchers.IO) {
-    readSnapshotInternal(context.applicationContext, keepLastSong)
+  fun readSnapshotBlocking(context: Context, keepLastSong: Boolean = true,
+    mode: MediaSourceMode = MediaSourceMode.Automatic): MediaPlaybackSnapshot = runBlocking(Dispatchers.IO) {
+    readSnapshot(context, keepLastSong, mode)
   }
 
-  private fun readSnapshotInternal(
-    context: Context,
-    keepLastSong: Boolean,
-  ): MediaPlaybackSnapshot {
-    if (!NotificationListenerAccess.isGranted(context)) {
-      return MediaPlaybackSnapshot(
-        availability = MediaPlaybackAvailability.PermissionRequired,
-        title = "Accesso media richiesto",
-        artist = "Abilita l'accesso notifiche per controllare Spotify.",
-        sourceLabel = "Permesso richiesto",
-      )
+  /** One session query per cycle; each distinct source/cache policy is resolved once. */
+  suspend fun readSnapshots(context: Context, settings: Collection<MediaWidgetSettings>):
+    Map<Pair<MediaSourceMode, Boolean>, MediaPlaybackSnapshot> = withContext(Dispatchers.IO) {
+    val controllers = supportedControllers(context)
+    settings.map { it.source to it.keepLastSong }.distinct().associateWith { (mode, keep) ->
+      readSnapshotInternal(context, keep, mode, controllers)
     }
+  }
 
-    val controller = activeController(context) ?: run {
-      val emptySnapshot = MediaPlaybackSnapshot(
-        availability = MediaPlaybackAvailability.NoSession,
-        title = "Nessuna riproduzione",
-        artist = "Apri Spotify, Apple Music o YouTube Music.",
-        sourceLabel = "In attesa",
-      )
-      val cachedSnapshot = if (keepLastSong) MediaPlaybackCache.read(context) else null
-      if (cachedSnapshot != null) return cachedSnapshot
-
-      // Keep the root tap actionable without leaking the hidden song metadata back into the UI.
-      val rememberedTarget = MediaPlaybackCache.readRememberedTarget(context)
-      return emptySnapshot.copy(packageName = rememberedTarget?.packageName.orEmpty())
+  private fun readSnapshotInternal(context: Context, keepLastSong: Boolean, mode: MediaSourceMode,
+    controllers: List<MediaController>): MediaPlaybackSnapshot {
+    val pkg = mode.packageName.orEmpty()
+    if (!NotificationListenerAccess.isGranted(context)) return MediaPlaybackSnapshot(
+      availability = MediaPlaybackAvailability.PermissionRequired, title = "Accesso media richiesto",
+      artist = "Abilita l'accesso notifiche.", sourceLabel = "Permesso richiesto", packageName = pkg,
+    )
+    if (pkg.isNotEmpty() && context.packageManager.getLaunchIntentForPackage(pkg) == null) {
+      return MediaPlaybackSnapshot(availability = MediaPlaybackAvailability.AppMissing,
+        title = "${mode.label} non installata", artist = "Installa l'app per usare questa sorgente.",
+        sourceLabel = mode.label, packageName = pkg)
     }
-
-    return controller.toSnapshot(context, keepLastSong)
+    val controller = selectController(controllers, mode)
+    if (controller != null) return controller.toSnapshot(context, keepLastSong)
+    val cached = if (keepLastSong) MediaPlaybackCache.read(context, mode.packageName) else null
+    if (cached != null && mode.accepts(cached.packageName)) return cached.copy(
+      isPlaying = false, canPlayPause = false, canSkipNext = false, canSkipPrevious = false)
+    val remembered = MediaPlaybackCache.readRememberedTarget(context, mode.packageName)
+    return MediaPlaybackSnapshot(availability = MediaPlaybackAvailability.NoSession,
+      title = "Nessuna riproduzione", artist = if (pkg.isEmpty()) "Apri un'app musicale." else "Apri ${mode.label} e avvia un brano.",
+      sourceLabel = if (pkg.isEmpty()) "In attesa" else mode.label,
+      packageName = pkg.ifEmpty { remembered?.packageName.orEmpty() })
   }
 
-  fun dispatch(context: Context, action: MediaControlAction): Boolean {
-    if (!NotificationListenerAccess.isGranted(context)) return false
-    val controller = activeController(context)
-    val dispatchedToSession = controller?.let { dispatchToController(it, action) } ?: false
-    return dispatchedToSession || dispatchMediaKeyFallback(context, action)
+  /** A command may only reach the exact session whose metadata was rendered. */
+  fun dispatch(context: Context, action: MediaControlAction, mode: MediaSourceMode,
+    shown: MediaPlaybackSnapshot): Boolean {
+    if (!NotificationListenerAccess.isGranted(context) || !mode.accepts(shown.packageName)) return false
+    val sessions = supportedControllers(context)
+    val token = resolveMediaCommandTarget(mode, shown.packageName, shown.sessionToken,
+      sessions.map { it.packageName to it.sessionToken }) ?: return false
+    val controller = sessions.firstOrNull {
+      it.sessionToken == token && it.packageName == shown.packageName
+    } ?: return false
+    return shown.canDispatch(action) && dispatchToController(controller, action)
   }
 
-  /** Lets the notification listener observe the same controller used by the widget. */
-  internal fun currentController(context: Context): MediaController? = activeController(context)
+  internal fun supportedControllers(context: Context): List<MediaController> {
+    if (!NotificationListenerAccess.isGranted(context)) return emptyList()
+    val manager = context.getSystemService(MediaSessionManager::class.java) ?: return emptyList()
+    return runCatching { manager.getActiveSessions(ComponentName(context, MediaNotificationListenerService::class.java)) }
+      .getOrDefault(emptyList()).filter { isSupportedMusicPackage(it.packageName) }
+  }
 
   private fun dispatchToController(controller: MediaController, action: MediaControlAction): Boolean {
     val controls = controller.transportControls
@@ -98,42 +104,15 @@ object MediaSessionReader {
     }.isSuccess
   }
 
-  private fun dispatchMediaKeyFallback(context: Context, action: MediaControlAction): Boolean {
-    val snapshot = readSnapshotBlocking(context, keepLastSong = true)
-    if (!snapshot.canDispatch(action)) return false
-    val keyCode = when (action) {
-      MediaControlAction.TogglePlayPause -> if (snapshot.isPlaying) {
-        KeyEvent.KEYCODE_MEDIA_PAUSE
-      } else {
-        KeyEvent.KEYCODE_MEDIA_PLAY
-      }
-      MediaControlAction.Next -> KeyEvent.KEYCODE_MEDIA_NEXT
-      MediaControlAction.Previous -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
-    }
-    val audioManager = context.getSystemService(AudioManager::class.java) ?: return false
-    return runCatching {
-      val now = SystemClock.uptimeMillis()
-      audioManager.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
-      audioManager.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
-      true
-    }.getOrDefault(false)
-  }
-
-  fun sessionActivity(context: Context): PendingIntent? {
-    if (!NotificationListenerAccess.isGranted(context)) return null
-    return activeController(context)?.sessionActivity
-  }
+  fun sessionActivity(context: Context, packageName: String): PendingIntent? =
+    supportedControllers(context).firstOrNull { it.packageName == packageName }?.sessionActivity
 
   internal fun resolveArtworkForTest(context: Context, metadata: MediaMetadata): Bitmap? =
     metadata.resolveArtwork(context.applicationContext, matchingCache = null).bitmap
 
-  private fun activeController(context: Context): MediaController? {
-    val manager = context.getSystemService(MediaSessionManager::class.java) ?: return null
-    val listenerComponent = ComponentName(context, MediaNotificationListenerService::class.java)
-    val controllers = runCatching { manager.getActiveSessions(listenerComponent) }
-      .getOrElse { return null }
-    val candidates = controllers.map { controller -> controller to controller.toCandidate() }
-    val selected = chooseBestMediaSession(candidates.map { it.second }) ?: return null
+  private fun selectController(controllers: List<MediaController>, mode: MediaSourceMode): MediaController? {
+    val candidates = controllers.map { it to it.toCandidate() }
+    val selected = chooseBestMediaSession(candidates.map { it.second }, mode) ?: return null
     return candidates.firstOrNull { it.second == selected }?.first
   }
 
@@ -190,10 +169,11 @@ object MediaSessionReader {
     ) || allowsFallbackTransport
     val canSkipNext = actions.hasAny(PlaybackState.ACTION_SKIP_TO_NEXT) || allowsFallbackTransport
     val canSkipPrevious = actions.hasAny(PlaybackState.ACTION_SKIP_TO_PREVIOUS) || allowsFallbackTransport
-    val cached = if (keepLastSong) MediaPlaybackCache.read(context) else null
+    val cached = if (keepLastSong) MediaPlaybackCache.read(context, packageName) else null
     val isPlaying = state?.let { it.state.isActivelyPlaying() } ?: cached?.isPlaying ?: false
     val identityProbe = MediaPlaybackSnapshot(
       availability = MediaPlaybackAvailability.Active,
+      sessionToken = sessionToken,
       title = title,
       artist = artist,
       album = album,
@@ -206,6 +186,7 @@ object MediaSessionReader {
 
     val baseSnapshot = MediaPlaybackSnapshot(
       availability = MediaPlaybackAvailability.Active,
+      sessionToken = sessionToken,
       title = title,
       artist = artist,
       album = album,
@@ -392,6 +373,7 @@ object MediaSessionReader {
     packageManager.getApplicationLabel(info).toString()
   }.getOrElse {
     when (packageName) {
+      MediaPackages.Fluidify -> "Fluidify"
       MediaPackages.Spotify -> "Spotify"
       MediaPackages.YouTubeMusic -> "YouTube Music"
       MediaPackages.AppleMusic -> "Apple Music"

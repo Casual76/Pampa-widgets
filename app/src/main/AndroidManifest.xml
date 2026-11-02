@@ -5,6 +5,7 @@
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
   <queries>
+    <package android:name="dev.pampa.fluidify" />
     <package android:name="com.spotify.music" />
     <package android:name="com.google.android.apps.youtube.music" />
     <package android:name="com.apple.android.music" />
@@ -26,6 +27,8 @@
     android:supportsRtl="true"
     android:theme="@style/Theme.PampaWidgets"
     android:usesCleartextTraffic="false">
+
+    <activity android:name=".widget.media.MediaWidgetLaunchActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
     <activity
       android:name=".MainActivity"

@@ -49,6 +49,11 @@ import com.pampa.widgets.core.settings.WidgetSortMode
 import com.pampa.widgets.core.update.AppUpdateInstallState
 import com.pampa.widgets.core.update.isBusy
 import com.pampa.widgets.ui.MainUiState
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import com.pampa.widgets.widget.media.ChoiceButtons
+import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
 
@@ -72,7 +77,7 @@ fun SettingsScreen(
   FluidScreen(
     modifier = Modifier.testTag("settings-screen"),
     title = "Impostazioni",
-    subtitle = "Infrastruttura pronta per catalogo, aggiornamenti e widget futuri.",
+    subtitle = "Aspetto, accesso media e aggiornamenti.",
   ) {
 
     item {
@@ -134,7 +139,7 @@ private fun MediaAccessSection(
       subtitle = if (granted) {
         "Accesso alle sessioni attive abilitato."
       } else {
-        "Serve per Spotify, YouTube Music e i pulsanti del widget."
+        "Serve per Spotify, Fluidify e i pulsanti del widget."
       },
     )
     Spacer(Modifier.height(14.dp))
@@ -147,11 +152,7 @@ private fun MediaAccessSection(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(Modifier.height(14.dp))
-    OutlinedButton(onClick = onOpenMediaAccessSettings) {
-      Icon(Icons.Rounded.MusicNote, contentDescription = null, modifier = Modifier.size(18.dp))
-      Spacer(Modifier.size(8.dp))
-      Text(if (granted) "Gestisci accesso" else "Abilita accesso")
-    }
+    FluidButton(if (granted) "Gestisci accesso" else "Abilita accesso", onOpenMediaAccessSettings, style = FluidButtonStyle.Tinted)
   }
 }
 
@@ -203,28 +204,12 @@ private fun UpdateSection(
       horizontalArrangement = Arrangement.spacedBy(10.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-      OutlinedButton(
-        onClick = onCheckUpdate,
-        enabled = !uiState.isCheckingUpdate && !uiState.updateInstallState.isBusy(),
-      ) {
-        Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.size(8.dp))
-        Text("Controlla")
-      }
-      Button(
-        onClick = onInstallUpdate,
-        enabled = uiState.availableUpdate != null && !uiState.updateInstallState.isBusy(),
-      ) {
-        Icon(Icons.Rounded.InstallMobile, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.size(8.dp))
-        Text("Installa")
-      }
-      OutlinedButton(
-        onClick = onIgnoreUpdate,
-        enabled = uiState.availableUpdate != null && !uiState.updateInstallState.isBusy(),
-      ) {
-        Text("Ignora versione")
-      }
+      FluidButton("Controlla", onCheckUpdate, style = FluidButtonStyle.Tinted,
+        enabled = !uiState.isCheckingUpdate && !uiState.updateInstallState.isBusy())
+      FluidButton("Installa", onInstallUpdate,
+        enabled = uiState.availableUpdate != null && !uiState.updateInstallState.isBusy())
+      if (uiState.availableUpdate != null) FluidButton("Ignora versione", onIgnoreUpdate, style = FluidButtonStyle.Plain)
+
     }
   }
 }
@@ -251,7 +236,7 @@ private fun UpdateStateContent(
         is AppUpdateInstallState.Downloading ->
           "${formatBytes(state.downloadedBytes)} / ${formatBytes(state.totalBytes)}"
         is AppUpdateInstallState.Error -> state.message
-        is AppUpdateInstallState.Installed -> "APK pronto: ${state.filePath}"
+        is AppUpdateInstallState.Installed -> "Aggiornamento pronto"
         else -> changelog.ifBlank { "Versione installata: ${BuildConfig.VERSION_NAME}" }
       },
       color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -268,30 +253,10 @@ private fun AppearanceSection(
   onDynamicColorChange: (Boolean) -> Unit,
 ) {
   SettingsSurface {
-    SectionTitle(icon = Icons.Rounded.AutoAwesome, title = "Aspetto", subtitle = "Material 3 Expressive e colori dinamici.")
+    SectionTitle(icon = Icons.Rounded.AutoAwesome, title = "Aspetto", subtitle = "Fluid Engine e colori dinamici.")
     Spacer(Modifier.height(14.dp))
-    FlowRow(
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      FilterChip(
-        selected = themeMode == ThemeMode.System,
-        onClick = { onThemeModeChange(ThemeMode.System) },
-        label = { Text("Sistema") },
-        leadingIcon = { Icon(Icons.Rounded.PhoneAndroid, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-      FilterChip(
-        selected = themeMode == ThemeMode.Light,
-        onClick = { onThemeModeChange(ThemeMode.Light) },
-        label = { Text("Chiaro") },
-        leadingIcon = { Icon(Icons.Rounded.LightMode, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-      FilterChip(
-        selected = themeMode == ThemeMode.Dark,
-        onClick = { onThemeModeChange(ThemeMode.Dark) },
-        label = { Text("Scuro") },
-        leadingIcon = { Icon(Icons.Rounded.DarkMode, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
+    ChoiceButtons(ThemeMode.entries, themeMode, onThemeModeChange) {
+      when (it) { ThemeMode.System -> "Sistema"; ThemeMode.Light -> "Chiaro"; ThemeMode.Dark -> "Scuro" }
     }
     HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
     SettingSwitchRow(
@@ -311,36 +276,11 @@ private fun StoreSection(
   onWidgetSortModeChange: (WidgetSortMode) -> Unit,
 ) {
   SettingsSurface {
-    SectionTitle(icon = Icons.Rounded.GridView, title = "Store", subtitle = "Preferenze gia attive sul catalogo vuoto.")
+    SectionTitle(icon = Icons.Rounded.GridView, title = "Catalogo", subtitle = "Scegli come esplorare i widget.")
     Spacer(Modifier.height(14.dp))
-    FlowRow(
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      FilterChip(
-        selected = layout == StoreLayout.Grid,
-        onClick = { onStoreLayoutChange(StoreLayout.Grid) },
-        label = { Text("Griglia") },
-        leadingIcon = { Icon(Icons.Rounded.GridView, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-      FilterChip(
-        selected = layout == StoreLayout.List,
-        onClick = { onStoreLayoutChange(StoreLayout.List) },
-        label = { Text("Lista") },
-        leadingIcon = { Icon(Icons.Rounded.ViewAgenda, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-      FilterChip(
-        selected = sortMode == WidgetSortMode.Featured,
-        onClick = { onWidgetSortModeChange(WidgetSortMode.Featured) },
-        label = { Text("In evidenza") },
-      )
-      FilterChip(
-        selected = sortMode == WidgetSortMode.Name,
-        onClick = { onWidgetSortModeChange(WidgetSortMode.Name) },
-        label = { Text("Nome") },
-        leadingIcon = { Icon(Icons.Rounded.SortByAlpha, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-    }
+    ChoiceButtons(StoreLayout.entries, layout, onStoreLayoutChange) { if (it == StoreLayout.Grid) "Griglia" else "Lista" }
+    Spacer(Modifier.height(12.dp))
+    ChoiceButtons(WidgetSortMode.entries, sortMode, onWidgetSortModeChange) { if (it == WidgetSortMode.Featured) "In evidenza" else "Nome" }
   }
 }
 
@@ -349,7 +289,7 @@ private fun AppInfoSection(widgetCount: Int) {
   SettingsSurface {
     SectionTitle(icon = Icons.Rounded.Download, title = "App", subtitle = "Pampa Widgets ${BuildConfig.VERSION_NAME}")
     Spacer(Modifier.height(12.dp))
-    InfoRow(label = "Package", value = BuildConfig.APPLICATION_ID)
+    InfoRow(label = "Fluid Engine", value = "1.30.1")
     InfoRow(label = "Widget registrati", value = widgetCount.toString())
     InfoRow(label = "Canale", value = "Stable")
   }
@@ -357,11 +297,7 @@ private fun AppInfoSection(widgetCount: Int) {
 
 @Composable
 private fun SettingsSurface(content: @Composable ColumnScope.() -> Unit) {
-  Surface(
-    modifier = Modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.large,
-    color = MaterialTheme.colorScheme.surfaceContainer,
-  ) {
+  FluidListGroup {
     Column(
       modifier = Modifier.padding(18.dp),
       content = content,
@@ -403,7 +339,7 @@ private fun SettingSwitchRow(
       Text(title, fontWeight = FontWeight.SemiBold)
       Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
-    Switch(checked = checked, onCheckedChange = onCheckedChange)
+    FluidSwitch(checked = checked, onCheckedChange = onCheckedChange)
   }
 }
 

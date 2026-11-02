@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 
 enum class MediaPlaybackAvailability {
   PermissionRequired,
+  AppMissing,
   NoSession,
   Active,
 }
@@ -22,6 +23,7 @@ data class MediaPlaybackSnapshot(
   val mediaId: String = "",
   val sourceLabel: String = "",
   val packageName: String = "",
+  val sessionToken: android.media.session.MediaSession.Token? = null,
   val isPlaying: Boolean = false,
   val canPlayPause: Boolean = false,
   val canSkipNext: Boolean = false,

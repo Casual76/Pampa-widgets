@@ -12,3 +12,6 @@ qa/
 *.apk
 *.idsig
 *.aab
+
+/build-validation/
+/qa/*.log

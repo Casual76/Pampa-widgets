@@ -12,7 +12,7 @@ import com.pampa.widgets.core.media.isSupportedMusicPackage
 class MediaNotificationListenerService : NotificationListenerService() {
   private var mediaSessionManager: MediaSessionManager? = null
   private var isSessionCallbackRegistered = false
-  private var observedController: MediaController? = null
+  private var observedControllers = emptyList<MediaController>()
 
   private val controllerCallback = object : MediaController.Callback() {
     override fun onPlaybackStateChanged(state: android.media.session.PlaybackState?) {
@@ -95,17 +95,16 @@ class MediaNotificationListenerService : NotificationListenerService() {
   }
 
   private fun refreshObservedController() {
-    val next = MediaSessionReader.currentController(applicationContext)
-    val current = observedController
-    if (current?.sessionToken == next?.sessionToken) return
-    current?.unregisterCallback(controllerCallback)
-    observedController = next
-    next?.registerCallback(controllerCallback)
+    val next = MediaSessionReader.supportedControllers(applicationContext)
+    if (observedControllers.map { it.sessionToken }.toSet() == next.map { it.sessionToken }.toSet()) return
+    clearObservedController()
+    observedControllers = next
+    next.forEach { runCatching { it.registerCallback(controllerCallback) } }
   }
 
   private fun clearObservedController() {
-    observedController?.unregisterCallback(controllerCallback)
-    observedController = null
+    observedControllers.forEach { runCatching { it.unregisterCallback(controllerCallback) } }
+    observedControllers = emptyList()
   }
 
   private fun StatusBarNotification.isRelevantMediaSignal(): Boolean {

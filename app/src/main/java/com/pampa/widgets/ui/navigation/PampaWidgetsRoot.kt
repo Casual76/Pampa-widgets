@@ -1,5 +1,19 @@
 package com.pampa.widgets.ui.navigation
 
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.compose.animation.*
+import androidx.compose.animation.core.snap
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
+import com.pampa.widgets.ui.store.MyWidgetsScreen
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
@@ -44,7 +58,8 @@ import androidx.compose.runtime.getValue
  * disegnarla lei, a due opacita' diverse, per far scorrere la pillola sotto quella selezionata.
  */
 private val tabItems = listOf(
-  FluidTabItem(route = AppRoutes.Store, label = "Store", icon = Icons.Rounded.Widgets),
+  FluidTabItem(route = AppRoutes.Store, label = "Widget", icon = Icons.Rounded.Widgets),
+  FluidTabItem(route = AppRoutes.MyWidgets, label = "I miei", icon = Icons.Rounded.Home),
   FluidTabItem(route = AppRoutes.Settings, label = "Impostazioni", icon = Icons.Rounded.Settings),
 )
 
@@ -95,17 +110,26 @@ fun PampaWidgetsRoot(
     val currentDestination = backStackEntry?.destination
     val selectedRoute = tabItems.firstOrNull { currentDestination.isInHierarchy(it.route) }?.route
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val wide = LocalConfiguration.current.screenWidthDp >= 840
+    val showNavigation = selectedRoute != null
+    val reduced = LocalFluidMotionPolicy.current.reducedMotion
+    val routeMotion = if (reduced) snap<androidx.compose.ui.unit.IntOffset>() else FluidMotion.intOffset()
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
       ProvideFluidChrome(
         controller = chromeController,
         // Lo spazio che la barra occuperebbe viene restituito al contenuto come spaziatura in
         // fondo: le liste finiscono sopra la barra invece che dietro.
-        bottomInset = FluidTabBarDefaults.ContentInset,
+        bottomInset = if (showNavigation && !wide) FluidTabBarDefaults.ContentInset else 0.dp,
         scrollToTop = scrollToTop,
       ) {
       NavHost(
         navController = navController,
         startDestination = AppRoutes.Store,
+        modifier = Modifier.fillMaxSize().padding(start = if (wide && showNavigation) 176.dp else 0.dp),
+        enterTransition = { slideInHorizontally(routeMotion) { it } },
+        exitTransition = { slideOutHorizontally(routeMotion) { -it } },
+        popEnterTransition = { slideInHorizontally(routeMotion) { -it } },
+        popExitTransition = { slideOutHorizontally(routeMotion) { it } },
       ) {
         composable(AppRoutes.Store) {
           StoreScreen(
@@ -113,10 +137,14 @@ fun PampaWidgetsRoot(
             onSearchQueryChange = onSearchQueryChange,
             onStoreLayoutChange = onStoreLayoutChange,
             onWidgetSortModeChange = onWidgetSortModeChange,
+            onPinWidget = onPinWidget,
             onWidgetClick = { widgetId -> navController.navigate(AppRoutes.widgetDetail(widgetId)) },
             onInstallUpdate = onInstallUpdate,
             onDismissUpdate = onDismissUpdate,
           )
+        }
+        composable(AppRoutes.MyWidgets) {
+          MyWidgetsScreen(uiState.settings) { navController.navigate(AppRoutes.Store) { launchSingleTop = true } }
         }
         composable(AppRoutes.Settings) {
           SettingsScreen(
@@ -146,7 +174,7 @@ fun PampaWidgetsRoot(
       }
       }
 
-      FluidTabBar(
+      if (showNavigation && !wide) FluidTabBar(
         items = tabItems,
         selectedRoute = selectedRoute,
         onSelect = { item ->
@@ -160,6 +188,20 @@ fun PampaWidgetsRoot(
         backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop,
         modifier = Modifier.align(Alignment.BottomCenter),
       )
+
+      if (showNavigation && wide) {
+        Column(Modifier.width(176.dp).fillMaxHeight().statusBarsPadding().navigationBarsPadding().padding(12.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          tabItems.forEach { item -> FluidButton(item.label, {
+            navController.navigate(item.route) {
+              popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+              launchSingleTop = true; restoreState = true
+            }
+          }, fillWidth = true,
+            style = if (selectedRoute == item.route) FluidButtonStyle.Filled else FluidButtonStyle.Plain,
+            leading = { Icon(item.icon, contentDescription = null) }) }
+        }
+      }
 
       SnackbarHost(
         hostState = snackbarHostState,

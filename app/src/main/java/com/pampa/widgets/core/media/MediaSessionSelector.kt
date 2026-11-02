@@ -1,5 +1,7 @@
 package com.pampa.widgets.core.media
 
+import com.pampa.widgets.core.settings.MediaSourceMode
+
 data class MediaSessionCandidate(
   val packageName: String,
   val isPlaying: Boolean,
@@ -10,6 +12,7 @@ data class MediaSessionCandidate(
 )
 
 object MediaPackages {
+  const val Fluidify = "dev.pampa.fluidify"
   const val Spotify = "com.spotify.music"
   const val YouTubeMusic = "com.google.android.apps.youtube.music"
   const val AppleMusic = "com.apple.android.music"
@@ -21,9 +24,9 @@ object MediaPackages {
   const val VLC = "org.videolan.vlc"
 }
 
-fun chooseBestMediaSession(candidates: List<MediaSessionCandidate>): MediaSessionCandidate? {
+fun chooseBestMediaSession(candidates: List<MediaSessionCandidate>, mode: MediaSourceMode = MediaSourceMode.Automatic): MediaSessionCandidate? {
   return candidates
-    .filter { it.supportsTransportControls && isSupportedMusicPackage(it.packageName) }
+    .filter { mode.accepts(it.packageName) && it.supportsTransportControls && isSupportedMusicPackage(it.packageName) }
     .maxWithOrNull(
       compareBy<MediaSessionCandidate> { it.isPlaying }
         .thenBy { it.hasSongIdentity }
@@ -36,6 +39,7 @@ fun chooseBestMediaSession(candidates: List<MediaSessionCandidate>): MediaSessio
 fun isSupportedMusicPackage(packageName: String): Boolean {
   return packageName in setOf(
     MediaPackages.Spotify,
+    MediaPackages.Fluidify,
     MediaPackages.YouTubeMusic,
     MediaPackages.AppleMusic,
     MediaPackages.SamsungMusic,
@@ -49,7 +53,8 @@ fun isSupportedMusicPackage(packageName: String): Boolean {
 
 private fun appPriority(packageName: String): Int {
   return when (packageName) {
-    MediaPackages.Spotify -> 9
+    MediaPackages.Spotify -> 10
+    MediaPackages.Fluidify -> 9
     MediaPackages.AppleMusic -> 8
     MediaPackages.YouTubeMusic -> 7
     MediaPackages.SamsungMusic -> 6

@@ -7,6 +7,8 @@ import com.pampa.widgets.core.media.MediaPlaybackAvailability
 import com.pampa.widgets.core.media.MediaPlaybackSnapshot
 import com.pampa.widgets.core.media.MediaSessionReader
 import com.pampa.widgets.core.settings.AppSettingsSnapshotReader
+import com.pampa.widgets.core.settings.MediaWidgetSettings
+import com.pampa.widgets.core.settings.MediaWidgetSettingsRepository
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,7 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private const val MediaSignalDebounceMs = 90L
 private const val CommandTimeoutMs = 1_600L
@@ -53,10 +54,6 @@ private data class PendingMediaCommand(
   val startedAtElapsedMs: Long,
 )
 
-internal fun interface MediaPlaybackSnapshotReader {
-  suspend fun read(context: Context, keepLastSong: Boolean): MediaPlaybackSnapshot
-}
-
 internal class LatestUpdateGeneration {
   private val value = AtomicLong(0L)
 
@@ -65,196 +62,163 @@ internal class LatestUpdateGeneration {
   fun isLatest(generation: Long): Boolean = generation == value.get()
 }
 
-private object PlatformMediaPlaybackSnapshotReader : MediaPlaybackSnapshotReader {
-  override suspend fun read(context: Context, keepLastSong: Boolean): MediaPlaybackSnapshot =
-    MediaSessionReader.readSnapshot(context, keepLastSong)
-}
-
-/**
- * Serializes every media/widget update and rejects work from an older generation before render.
- * A conflated queue collapses callback bursts without losing the newest state.
- */
+/** Serial work queue: commands and settings writes cannot race a rendered source. */
 internal object MediaWidgetUpdateCoordinator {
-  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val requests = Channel<UpdateRequest>(Channel.CONFLATED)
   private val requestedGeneration = LatestUpdateGeneration()
-  private val stateLock = Any()
-  private var snapshotReader: MediaPlaybackSnapshotReader = PlatformMediaPlaybackSnapshotReader
-  private var latestSnapshot: MediaPlaybackSnapshot? = null
-  private var nextCommandId = 0L
-  private var pendingCommand: PendingMediaCommand? = null
-  private var commandResolutionJob: Job? = null
-  private var artworkRetryTrackKey = ""
-  private var artworkRetryJob: Job? = null
+  private val mutex = kotlinx.coroutines.sync.Mutex()
+  private val latest = mutableMapOf<Int, Pair<MediaWidgetSettings, MediaPlaybackSnapshot>>()
+  private val pending = mutableMapOf<Int, PendingMediaCommand>()
+  private val commandJobs = mutableMapOf<Int, Job>()
+  private val artworkJobs = mutableMapOf<Int, Pair<String, Job>>()
+  private var commandId = 0L
 
   init {
     scope.launch {
-      for (request in requests) process(request)
+      for (request in requests) {
+        try { process(request) } catch (error: Exception) {
+          if (error is kotlinx.coroutines.CancellationException) throw error
+          android.util.Log.e("MediaWidget", "Widget update failed", error)
+        }
+      }
     }
   }
 
-  fun requestUpdate(
-    context: Context,
-    reason: MediaWidgetUpdateReason = MediaWidgetUpdateReason.MediaSignal,
-  ) {
-    val appContext = context.applicationContext
-    val generation = requestedGeneration.issue()
-    requests.trySend(UpdateRequest(generation, appContext, reason))
+  fun requestUpdate(context: Context, reason: MediaWidgetUpdateReason = MediaWidgetUpdateReason.MediaSignal) {
+    requests.trySend(UpdateRequest(requestedGeneration.issue(), context.applicationContext, reason))
   }
 
-  fun dispatchControl(
-    context: Context,
-    action: MediaControlAction,
-    onComplete: () -> Unit = {},
-  ) {
-    val appContext = context.applicationContext
+  private fun ids(context: Context) = android.appwidget.AppWidgetManager.getInstance(context)
+    .getAppWidgetIds(android.content.ComponentName(context, MediaWidgetProvider::class.java))
+
+  suspend fun saveSettings(context: Context, id: Int, settings: MediaWidgetSettings) {
+    requestedGeneration.issue()
+    mutex.lock()
+    try {
+      MediaWidgetSettingsRepository(context).save(id, settings)
+      clearState(id)
+    } finally { mutex.unlock() }
+    requestUpdate(context, MediaWidgetUpdateReason.Settings)
+  }
+
+  fun dispatchControl(context: Context, id: Int, action: MediaControlAction, onComplete: () -> Unit = {}) {
     scope.launch {
       try {
-        val settings = withContext(Dispatchers.IO) {
-          AppSettingsSnapshotReader.readBlocking(appContext)
-        }
-        val baseline = synchronized(stateLock) { latestSnapshot }
-          ?: snapshotReader.read(appContext, settings.mediaWidgetKeepLastSong)
-        val dispatched = MediaSessionReader.dispatch(appContext, action)
-        if (dispatched && baseline.canHandle(action)) {
-          val command = synchronized(stateLock) {
-            PendingMediaCommand(
-              id = ++nextCommandId,
-              action = action,
-              baselineTrackKey = baseline.trackKey,
-              expectedPlaying = if (action == MediaControlAction.TogglePlayPause) !baseline.isPlaying else null,
-              startedAtElapsedMs = SystemClock.elapsedRealtime(),
-            ).also { pendingCommand = it }
+        mutex.lock()
+        try {
+          if (id !in ids(context)) return@launch
+          val settings = MediaWidgetSettingsRepository(context).read(id)
+          val displayed = latest[id] ?: return@launch // No guessing after process death.
+          if (displayed.first != settings) return@launch
+          val baseline = displayed.second
+          if (MediaSessionReader.dispatch(context, action, settings.source, baseline)) {
+            val previous = pending[id]
+            val expected = if (action == MediaControlAction.TogglePlayPause) {
+              !(previous?.expectedPlaying ?: baseline.isPlaying)
+            } else null
+            pending[id] = PendingMediaCommand(++commandId, action, baseline.trackKey, expected, SystemClock.elapsedRealtime())
+            commandJobs.remove(id)?.cancel()
+            commandJobs[id] = scope.launch {
+              var last = 0L
+              (CommandResyncDelaysMs + CommandTimeoutMs).forEach { next ->
+                delay(next - last); last = next
+                requestUpdate(context, MediaWidgetUpdateReason.ControlResync)
+              }
+            }
           }
-          scheduleCommandResolution(appContext, command)
-        }
-        requestUpdate(appContext, MediaWidgetUpdateReason.ControlFeedback)
+        } finally { mutex.unlock() }
       } finally {
+        requestUpdate(context, MediaWidgetUpdateReason.ControlFeedback)
         onComplete()
       }
     }
   }
 
-  fun onWidgetsDeleted(appWidgetIds: IntArray) {
-    MediaWidgetUpdater.onDeleted(appWidgetIds)
+  fun onWidgetsDeleted(context: Context, widgetIds: IntArray, onComplete: () -> Unit = {}) {
+    scope.launch {
+      try {
+        requestedGeneration.issue()
+        mutex.lock()
+        try {
+          MediaWidgetSettingsRepository(context).delete(widgetIds)
+          widgetIds.forEach(::clearState)
+        } finally { mutex.unlock() }
+      } finally { onComplete() }
+    }
+  }
+
+  fun restore(context: Context, oldIds: IntArray, newIds: IntArray, onComplete: () -> Unit) {
+    scope.launch {
+      try {
+        requestedGeneration.issue()
+        mutex.lock()
+        try {
+          val defaults = MediaWidgetSettings.fromLegacy(AppSettingsSnapshotReader.readBlocking(context))
+          MediaWidgetSettingsRepository(context).restore(oldIds, newIds, defaults)
+          (oldIds + newIds).forEach(::clearState)
+          newIds.forEach { id -> android.appwidget.AppWidgetManager.getInstance(context).updateAppWidgetOptions(id,
+            android.os.Bundle().apply { putBoolean(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_RESTORE_COMPLETED, true) }) }
+        } finally { mutex.unlock() }
+        requestUpdate(context, MediaWidgetUpdateReason.WidgetLifecycle)
+      } finally { onComplete() }
+    }
+  }
+
+  private fun clearState(id: Int) {
+    latest.remove(id); pending.remove(id)
+    commandJobs.remove(id)?.cancel(); artworkJobs.remove(id)?.second?.cancel()
+    MediaWidgetUpdater.onDeleted(intArrayOf(id))
   }
 
   private suspend fun process(request: UpdateRequest) {
     if (!request.reason.immediate) delay(MediaSignalDebounceMs)
     if (!requestedGeneration.isLatest(request.generation)) return
-
-    val settings = withContext(Dispatchers.IO) {
-      AppSettingsSnapshotReader.readBlocking(request.context)
-    }
-    val snapshot = snapshotReader.read(request.context, settings.mediaWidgetKeepLastSong)
-    if (!requestedGeneration.isLatest(request.generation)) return
-
-    val interaction = interactionFor(snapshot, settings.mediaWidgetAnimatedFeedback || settings.mediaWidgetInstantControls)
-    MediaWidgetUpdater.renderAll(
-      context = request.context,
-      snapshot = snapshot,
-      settings = settings,
-      interaction = interaction,
-    )
-    synchronized(stateLock) { latestSnapshot = snapshot }
-    updateArtworkRetry(request.context, snapshot)
-  }
-
-  private fun interactionFor(
-    snapshot: MediaPlaybackSnapshot,
-    showFeedback: Boolean,
-  ): MediaWidgetInteraction? = synchronized(stateLock) {
-    val command = pendingCommand ?: return@synchronized null
-    val expired = SystemClock.elapsedRealtime() - command.startedAtElapsedMs >= CommandTimeoutMs
-    if (expired || snapshot.confirms(command) || snapshot.availability == MediaPlaybackAvailability.PermissionRequired) {
-      pendingCommand = null
-      commandResolutionJob?.cancel()
-      commandResolutionJob = null
-      return@synchronized null
-    }
-    MediaWidgetInteraction(command.action, showFeedback, command.expectedPlaying)
-  }
-
-  private fun scheduleCommandResolution(context: Context, command: PendingMediaCommand) {
-    synchronized(stateLock) {
-      commandResolutionJob?.cancel()
-      commandResolutionJob = scope.launch {
-        var previousDelay = 0L
-        CommandResyncDelaysMs.forEach { absoluteDelay ->
-          delay(absoluteDelay - previousDelay)
-          previousDelay = absoluteDelay
-          if (!isCommandPending(command.id)) return@launch
-          requestUpdate(context, MediaWidgetUpdateReason.ControlResync)
+    val repository = MediaWidgetSettingsRepository(request.context)
+    val app = AppSettingsSnapshotReader.readBlocking(request.context)
+    mutex.lock()
+    val settings = try {
+      if (!requestedGeneration.isLatest(request.generation)) return
+      repository.ensure(ids(request.context), MediaWidgetSettings.fromLegacy(app))
+    } finally { mutex.unlock() }
+    val snapshots = MediaSessionReader.readSnapshots(request.context, settings.values)
+    mutex.lock()
+    try {
+      if (!requestedGeneration.isLatest(request.generation)) return
+      val activeIds = ids(request.context).toSet()
+      for ((id, config) in settings) {
+        if (id !in activeIds || repository.read(id) != config) continue
+        val snapshot = snapshots.getValue(config.source to config.keepLastSong)
+        val old = latest[id]
+        if (old != null && (old.first.source != config.source || old.second.sessionToken != snapshot.sessionToken)) {
+          clearState(id)
         }
-        delay((CommandTimeoutMs - previousDelay).coerceAtLeast(0L))
-        val cleared = synchronized(stateLock) {
-          if (pendingCommand?.id != command.id) false else {
-            pendingCommand = null
-            commandResolutionJob = null
-            true
+        val command = pending[id]
+        val confirmed = command != null && when (command.action) {
+          MediaControlAction.TogglePlayPause -> snapshot.isPlaying == command.expectedPlaying
+          else -> snapshot.trackKey != command.baselineTrackKey
+        }
+        if (command != null && (confirmed || SystemClock.elapsedRealtime() - command.startedAtElapsedMs >= CommandTimeoutMs ||
+            snapshot.availability != MediaPlaybackAvailability.Active)) {
+          pending.remove(id); commandJobs.remove(id)?.cancel()
+        }
+        val feedback = pending[id]?.let { MediaWidgetInteraction(it.action,
+          config.animatedFeedback || config.instantControls, it.expectedPlaying) }
+        MediaWidgetUpdater.renderInstance(request.context, id, snapshot, config.applyTo(app), feedback)
+        latest[id] = config to snapshot
+        if (snapshot.availability == MediaPlaybackAvailability.Active && snapshot.artwork == null) {
+          if (artworkJobs[id]?.first != snapshot.trackKey) {
+            artworkJobs.remove(id)?.second?.cancel()
+            artworkJobs[id] = snapshot.trackKey to scope.launch {
+              var last = 0L
+              ArtworkRetryDelaysMs.forEach { next ->
+                delay(next - last); last = next
+                requestUpdate(request.context, MediaWidgetUpdateReason.ArtworkRetry)
+              }
+            }
           }
-        }
-        if (cleared) requestUpdate(context, MediaWidgetUpdateReason.ControlResync)
+        } else { artworkJobs.remove(id)?.second?.cancel() }
       }
-    }
-  }
-
-  private fun isCommandPending(commandId: Long): Boolean =
-    synchronized(stateLock) { pendingCommand?.id == commandId }
-
-  private fun updateArtworkRetry(context: Context, snapshot: MediaPlaybackSnapshot) {
-    val shouldRetry = snapshot.availability == MediaPlaybackAvailability.Active &&
-      snapshot.trackKey.isNotBlank() && snapshot.artwork == null
-    if (!shouldRetry) {
-      cancelArtworkRetry()
-      return
-    }
-    synchronized(stateLock) {
-      if (artworkRetryTrackKey == snapshot.trackKey) return
-      artworkRetryJob?.cancel()
-      artworkRetryTrackKey = snapshot.trackKey
-      artworkRetryJob = scope.launch {
-        var previousDelay = 0L
-        ArtworkRetryDelaysMs.forEach { absoluteDelay ->
-          delay(absoluteDelay - previousDelay)
-          previousDelay = absoluteDelay
-          val stillMissing = synchronized(stateLock) {
-            latestSnapshot?.trackKey == snapshot.trackKey && latestSnapshot?.artwork == null
-          }
-          if (!stillMissing) return@launch
-          requestUpdate(context, MediaWidgetUpdateReason.ArtworkRetry)
-        }
-      }
-    }
-  }
-
-  private fun cancelArtworkRetry() = synchronized(stateLock) {
-    artworkRetryJob?.cancel()
-    artworkRetryJob = null
-    artworkRetryTrackKey = ""
-  }
-
-  private fun MediaPlaybackSnapshot.canHandle(action: MediaControlAction): Boolean =
-    when (action) {
-      MediaControlAction.TogglePlayPause -> canPlayPause
-      MediaControlAction.Next -> canSkipNext
-      MediaControlAction.Previous -> canSkipPrevious
-    }
-
-  private fun MediaPlaybackSnapshot.confirms(command: PendingMediaCommand): Boolean {
-    if (availability != MediaPlaybackAvailability.Active) return false
-    return when (command.action) {
-      MediaControlAction.TogglePlayPause -> isPlaying == command.expectedPlaying
-      MediaControlAction.Next,
-      MediaControlAction.Previous -> trackKey.isNotBlank() && trackKey != command.baselineTrackKey
-    }
-  }
-
-  internal fun setSnapshotReaderForTest(reader: MediaPlaybackSnapshotReader) {
-    synchronized(stateLock) { snapshotReader = reader }
-  }
-
-  internal fun resetSnapshotReaderForTest() {
-    synchronized(stateLock) { snapshotReader = PlatformMediaPlaybackSnapshotReader }
+    } finally { mutex.unlock() }
   }
 }

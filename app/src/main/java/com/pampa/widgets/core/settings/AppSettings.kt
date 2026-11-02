@@ -16,6 +16,7 @@ enum class WidgetSortMode {
   Name,
 }
 
+@kotlinx.serialization.Serializable
 enum class MediaWidgetTheme {
   SamsungGlass,
   AdaptiveGlass,
@@ -24,6 +25,7 @@ enum class MediaWidgetTheme {
   AlbumColor,
 }
 
+@kotlinx.serialization.Serializable
 enum class MediaWidgetArtworkSize {
   Compact,
   Balanced,

@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
+import android.graphics.Path
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
@@ -108,17 +109,9 @@ object MediaWidgetUpdater {
   private val stateLock = Any()
   private val visualStates = mutableMapOf<Int, MediaWidgetVisualState>()
 
-  internal fun renderAll(
-    context: Context,
-    snapshot: MediaPlaybackSnapshot,
-    settings: AppSettings,
-    interaction: MediaWidgetInteraction? = null,
-  ) {
-    val appContext = context.applicationContext
-    val appWidgetManager = AppWidgetManager.getInstance(appContext)
-    val component = ComponentName(appContext, MediaWidgetProvider::class.java)
-    val widgetIds = appWidgetManager.getAppWidgetIds(component)
-    updateWithSnapshot(appContext, appWidgetManager, widgetIds, snapshot, settings, interaction)
+  internal fun renderInstance(context: Context, widgetId: Int, snapshot: MediaPlaybackSnapshot,
+    settings: AppSettings, interaction: MediaWidgetInteraction? = null) {
+    updateWithSnapshot(context, AppWidgetManager.getInstance(context), intArrayOf(widgetId), snapshot, settings, interaction)
   }
 
   fun onDeleted(appWidgetIds: IntArray) {
@@ -194,9 +187,9 @@ object MediaWidgetUpdater {
         widgetId = widgetId,
         snapshot = snapshot,
         style = style,
-        animateChanges = settings.mediaWidgetAnimatedFeedback,
+        animateChanges = settings.mediaWidgetAnimatedFeedback && android.animation.ValueAnimator.areAnimatorsEnabled(),
       )
-      val views = buildRemoteViews(context, snapshot, settings, style, layout, visualPlan, interaction)
+      val views = buildRemoteViews(context, snapshot, settings, style, layout, visualPlan, interaction, widgetId)
       if (visualPlan.initialize) {
         appWidgetManager.updateAppWidget(widgetId, views)
       } else {
@@ -298,6 +291,7 @@ object MediaWidgetUpdater {
     layout: MediaWidgetLayoutSpec,
     visualPlan: MediaWidgetVisualPlan,
     interaction: MediaWidgetInteraction?,
+    widgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
   ): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_media_controls)
 
@@ -350,32 +344,32 @@ object MediaWidgetUpdater {
     applyTime(views, snapshot, layout)
 
     val playIntent = if (snapshot.availability == MediaPlaybackAvailability.PermissionRequired) {
-      settingsPendingIntent(context)
+      settingsPendingIntent(context, widgetId)
     } else {
-      broadcastPendingIntent(context, MediaWidgetProvider.ActionTogglePlayPause, 1)
+      broadcastPendingIntent(context, MediaWidgetProvider.ActionTogglePlayPause, 1, widgetId)
     }
     views.setOnClickPendingIntent(R.id.media_widget_play_pause, playIntent)
     views.setOnClickPendingIntent(R.id.media_widget_play_pause_container, playIntent)
-    views.setOnClickPendingIntent(R.id.media_widget_permission, settingsPendingIntent(context))
-    val openMediaIntent = openMediaAppPendingIntent(context, snapshot)
+    views.setOnClickPendingIntent(R.id.media_widget_permission, settingsPendingIntent(context, widgetId))
+    val openMediaIntent = openMediaAppPendingIntent(context, snapshot, widgetId)
     views.setOnClickPendingIntent(R.id.media_widget_root, openMediaIntent)
     views.setOnClickPendingIntent(R.id.media_widget_track_row, openMediaIntent)
     views.setOnClickPendingIntent(R.id.media_widget_artwork_frame, openMediaIntent)
     views.setOnClickPendingIntent(R.id.media_widget_text_stack, openMediaIntent)
     views.setOnClickPendingIntent(
       R.id.media_widget_previous,
-      broadcastPendingIntent(context, MediaWidgetProvider.ActionPrevious, 2),
+      broadcastPendingIntent(context, MediaWidgetProvider.ActionPrevious, 2, widgetId),
     )
     views.setOnClickPendingIntent(
       R.id.media_widget_next,
-      broadcastPendingIntent(context, MediaWidgetProvider.ActionNext, 3),
+      broadcastPendingIntent(context, MediaWidgetProvider.ActionNext, 3, widgetId),
     )
     views.setOnClickPendingIntent(
       R.id.media_widget_refresh,
-      broadcastPendingIntent(context, MediaWidgetProvider.ActionRefresh, 4),
+      broadcastPendingIntent(context, MediaWidgetProvider.ActionRefresh, 4, widgetId),
     )
     views.setOnClickPendingIntent(R.id.media_widget_open_media, openMediaIntent)
-    views.setOnClickPendingIntent(R.id.media_widget_open_pampa, mainActivityPendingIntent(context))
+    views.setOnClickPendingIntent(R.id.media_widget_open_pampa, configurationPendingIntent(context, widgetId))
     applyAnimatedTransitions(views, visualPlan)
     return views
   }
@@ -697,7 +691,7 @@ object MediaWidgetUpdater {
       widgetId = widgetId,
       snapshot = snapshot,
       style = style,
-      animateChanges = settings.mediaWidgetAnimatedFeedback,
+      animateChanges = settings.mediaWidgetAnimatedFeedback && android.animation.ValueAnimator.areAnimatorsEnabled(),
     )
     val renderSignature = mediaWidgetRenderSignature(
       snapshot = snapshot,
@@ -720,8 +714,11 @@ object MediaWidgetUpdater {
     context: Context,
     action: String,
     requestCode: Int,
+    widgetId: Int = -1,
   ): PendingIntent {
     val intent = Intent(context, MediaWidgetProvider::class.java).setAction(action)
+      .setData(android.net.Uri.parse("pampa://widget/$widgetId/$action"))
+      .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
     return PendingIntent.getBroadcast(
       context,
       requestCode,
@@ -730,45 +727,42 @@ object MediaWidgetUpdater {
     )
   }
 
-  private fun settingsPendingIntent(context: Context): PendingIntent {
+  private fun settingsPendingIntent(context: Context, widgetId: Int): PendingIntent {
     return PendingIntent.getActivity(
       context,
-      20,
+      widgetId,
       NotificationListenerAccess.settingsIntent(),
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
   }
 
-  private fun mainActivityPendingIntent(context: Context): PendingIntent {
-    val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    return PendingIntent.getActivity(
-      context,
-      21,
-      intent,
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
+  private fun configurationPendingIntent(context: Context, widgetId: Int): PendingIntent = PendingIntent.getActivity(
+    context, widgetId, Intent(context, MediaWidgetConfigurationActivity::class.java)
+      .setData(android.net.Uri.parse("pampa://widget/$widgetId/configure"))
+      .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId),
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+  )
+
+  private fun openMediaAppPendingIntent(context: Context, snapshot: MediaPlaybackSnapshot, widgetId: Int): PendingIntent {
+    if (widgetId <= 0) {
+      val launch = mediaAppLaunchIntent(context, snapshot)
+        ?: return broadcastPendingIntent(context, MediaWidgetProvider.ActionNoOp, 30)
+      return PendingIntent.getActivity(context, 30, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+    return PendingIntent.getActivity(context, widgetId,
+      Intent(context, MediaWidgetLaunchActivity::class.java)
+        .setData(android.net.Uri.parse("pampa://widget/$widgetId/open"))
+        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+        .putExtra("shownPackage", snapshot.packageName),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   }
 
-  private fun openMediaAppPendingIntent(
-    context: Context,
-    snapshot: MediaPlaybackSnapshot,
-  ): PendingIntent {
-    MediaSessionReader.sessionActivity(context)?.let { return it }
-    val launchIntent = mediaAppLaunchIntent(context, snapshot)
-      ?: return broadcastPendingIntent(context, MediaWidgetProvider.ActionNoOp, 30)
-    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    return PendingIntent.getActivity(
-      context,
-      30,
-      launchIntent,
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
-  }
 }
 
 internal fun MediaPlaybackSnapshot.launchPackageName(): String {
   if (packageName.isNotBlank()) return packageName
   return when (sourceLabel.trim().lowercase()) {
+    "fluidify" -> MediaPackages.Fluidify
     "spotify" -> MediaPackages.Spotify
     "youtube music", "yt music" -> MediaPackages.YouTubeMusic
     "apple music" -> MediaPackages.AppleMusic
@@ -1159,16 +1153,16 @@ private data class MediaWidgetStyle(
       height: Int,
       darkSurface: Boolean,
     ): Bitmap {
-      val radius = (min(width, height) * 0.10f).coerceIn(42f, 74f)
+      val radius = (min(width, height) * 0.14f).coerceIn(44f, 84f)
       val bounds = RectF(0f, 0f, width.toFloat(), height.toFloat())
 
       val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
       val layer = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
       val layerCanvas = Canvas(layer)
 
-      val topTone = backgroundColor.lighten(0.10f)
-      val middleTone = backgroundColor.lighten(0.025f)
-      val lowerTone = backgroundColor.darken(0.045f)
+      val topTone = backgroundColor.lighten(0.055f)
+      val middleTone = backgroundColor.lighten(0.015f)
+      val lowerTone = backgroundColor.darken(0.025f)
       val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         shader = LinearGradient(
           0f,
@@ -1180,12 +1174,12 @@ private data class MediaWidgetStyle(
           Shader.TileMode.CLAMP,
         )
       }
-      layerCanvas.drawRoundRect(bounds, radius, radius, gradientPaint)
+      layerCanvas.drawPath(continuousWidgetPath(bounds, radius), gradientPaint)
 
       // Mask everything into the rounded card.
       val canvas = Canvas(output)
       val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-      canvas.drawRoundRect(bounds, radius, radius, maskPaint)
+      canvas.drawPath(continuousWidgetPath(bounds, radius), maskPaint)
       val contentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
       }
@@ -1198,7 +1192,7 @@ private data class MediaWidgetStyle(
         strokeWidth = 1.4f
         color = if (darkSurface) backgroundColor.lighten(0.18f) else backgroundColor.darken(0.10f)
       }
-      canvas.drawRoundRect(bounds.insetBy(0.7f), radius, radius, rimPaint)
+      canvas.drawPath(continuousWidgetPath(bounds.insetBy(0.7f), radius), rimPaint)
       return output
     }
   }
@@ -1308,6 +1302,7 @@ private fun MediaPlaybackSnapshot.progressPermille(): Int {
 private fun MediaPlaybackSnapshot.statusLabel(): String =
   when (availability) {
     MediaPlaybackAvailability.PermissionRequired -> "Accesso richiesto"
+    MediaPlaybackAvailability.AppMissing -> "App non installata"
     MediaPlaybackAvailability.NoSession -> if (isFromCache) "Ultima sessione" else "Nessuna sessione"
     MediaPlaybackAvailability.Active -> if (isPlaying) "In riproduzione" else "In pausa"
   }
@@ -1359,7 +1354,7 @@ private fun Bitmap.roundedSquare(): Bitmap {
   val rect = Rect(0, 0, output.width, output.height)
   val source = Rect(left, top, left + size, top + size)
   val rounded = RectF(rect)
-  canvas.drawRoundRect(rounded, 42f, 42f, paint.apply { color = Color.WHITE })
+  canvas.drawPath(continuousWidgetPath(rounded, min(rounded.width(), rounded.height()) * 0.22f), paint.apply { color = Color.WHITE })
   paint.shader = null
   paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
   canvas.drawBitmap(this, source, rect, paint)
@@ -1457,3 +1452,17 @@ private fun RectF.insetBy(amount: Float): RectF =
 
 private fun Context.dp(value: Int): Int =
   (value * resources.displayMetrics.density).toInt()
+
+/** Continuous tangent corners for the opaque RemoteViews surfaces and artwork mask. */
+private fun continuousWidgetPath(bounds: RectF, corner: Float): Path {
+  val r = corner.coerceAtMost(min(bounds.width(), bounds.height()) / 2)
+  val l = bounds.left; val t = bounds.top; val b = bounds.bottom; val right = bounds.right
+  val c = r * 0.22f
+  return Path().apply {
+    moveTo(l + r, t); lineTo(right - r, t)
+    cubicTo(right - c, t, right, t + c, right, t + r)
+    lineTo(right, b - r); cubicTo(right, b - c, right - c, b, right - r, b)
+    lineTo(l + r, b); cubicTo(l + c, b, l, b - c, l, b - r)
+    lineTo(l, t + r); cubicTo(l, t + c, l + c, t, l + r, t); close()
+  }
+}

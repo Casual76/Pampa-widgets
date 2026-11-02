@@ -6,472 +6,163 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pampa.widgets.core.design.PampaWidgetsTheme
 import com.pampa.widgets.core.media.NotificationListenerAccess
-import com.pampa.widgets.core.settings.AppSettings
-import com.pampa.widgets.core.settings.MediaWidgetArtworkSize
-import com.pampa.widgets.core.settings.MediaWidgetTheme
-import com.pampa.widgets.ui.MainViewModel
-import dagger.hilt.android.AndroidEntryPoint
+import com.pampa.widgets.core.settings.*
+import dev.antigravity.fluidengine.ui.fluid.*
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
-@AndroidEntryPoint
 class MediaWidgetConfigurationActivity : ComponentActivity() {
-  private val appWidgetId: Int
-    get() = intent?.extras?.getInt(
-      AppWidgetManager.EXTRA_APPWIDGET_ID,
-      AppWidgetManager.INVALID_APPWIDGET_ID,
-    ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
-
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setResult(RESULT_CANCELED)
+    val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+    if (id <= 0) { finish(); return }
     enableEdgeToEdge()
-
     setContent {
-      val viewModel: MainViewModel = hiltViewModel()
-      val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-      LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        viewModel.refreshMediaAccess()
+      var app by remember { mutableStateOf(AppSettings()) }
+      var draftJson by rememberSaveable(id) { mutableStateOf<String?>(null) }
+      var saving by remember { mutableStateOf(false) }
+      var error by remember { mutableStateOf<String?>(null) }
+      var granted by remember { mutableStateOf(false) }
+      val scope = rememberCoroutineScope()
+      val repository = remember { MediaWidgetSettingsRepository(this) }
+      LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { granted = NotificationListenerAccess.isGranted(this) }
+      LaunchedEffect(id) {
+        app = withContext(Dispatchers.IO) { AppSettingsSnapshotReader.readBlocking(this@MediaWidgetConfigurationActivity) }
+        if (draftJson == null) draftJson = Json.encodeToString(repository.read(id, MediaWidgetSettings.fromLegacy(app)))
       }
-
-      PampaWidgetsTheme(settings = uiState.settings) {
-        MediaWidgetConfigurationScreen(
-          settings = uiState.settings,
-          mediaNotificationAccessGranted = uiState.mediaNotificationAccessGranted,
-          onThemeChange = viewModel::setMediaWidgetTheme,
-          onArtworkSizeChange = viewModel::setMediaWidgetArtworkSize,
-          onShowSourceChange = viewModel::setMediaWidgetShowSource,
-          onShowArtistChange = viewModel::setMediaWidgetShowArtist,
-          onKeepLastSongChange = viewModel::setMediaWidgetKeepLastSong,
-          onInstantControlsChange = viewModel::setMediaWidgetInstantControls,
-          onAnimatedFeedbackChange = viewModel::setMediaWidgetAnimatedFeedback,
-          onOpenMediaAccessSettings = {
-            runCatching { startActivity(NotificationListenerAccess.settingsIntent()) }
-          },
-          onCancel = { finish() },
-          onDone = { finishConfiguration() },
-        )
-      }
-    }
-  }
-
-  private fun finishConfiguration() {
-    MediaWidgetUpdateCoordinator.requestUpdate(this, MediaWidgetUpdateReason.Settings)
-    val result = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-    setResult(RESULT_OK, result)
-    finish()
-  }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-private fun MediaWidgetConfigurationScreen(
-  settings: AppSettings,
-  mediaNotificationAccessGranted: Boolean,
-  onThemeChange: (MediaWidgetTheme) -> Unit,
-  onArtworkSizeChange: (MediaWidgetArtworkSize) -> Unit,
-  onShowSourceChange: (Boolean) -> Unit,
-  onShowArtistChange: (Boolean) -> Unit,
-  onKeepLastSongChange: (Boolean) -> Unit,
-  onInstantControlsChange: (Boolean) -> Unit,
-  onAnimatedFeedbackChange: (Boolean) -> Unit,
-  onOpenMediaAccessSettings: () -> Unit,
-  onCancel: () -> Unit,
-  onDone: () -> Unit,
-) {
-  Scaffold(
-    topBar = {
-      TopAppBar(
-        title = {
-          Text("Media Controls", maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        navigationIcon = {
-          IconButton(onClick = onCancel) {
-            Icon(Icons.Rounded.Close, contentDescription = "Chiudi")
-          }
-        },
-        actions = {
-          IconButton(onClick = onDone) {
-            Icon(Icons.Rounded.Check, contentDescription = "Salva")
-          }
-        },
-      )
-    },
-    bottomBar = {
-      Surface(shadowElevation = 8.dp) {
-        Button(
-          onClick = onDone,
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        ) {
-          Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-          Spacer(Modifier.width(8.dp))
-          Text("Salva widget")
-        }
-      }
-    },
-  ) { paddingValues ->
-    LazyColumn(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(paddingValues)
-        .padding(horizontal = 18.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
-      contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 14.dp),
-    ) {
-      item { WidgetPreview(settings = settings) }
-
-      item {
-        ConfigSurface {
-          SectionHeader(
-            icon = Icons.Rounded.Palette,
-            title = "Aspetto",
-            subtitle = "Superficie pulita, tinta dalla canzone e cover nel riquadro.",
-          )
-          Spacer(Modifier.height(14.dp))
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            ThemeChip("Vetro", MediaWidgetTheme.SamsungGlass, settings.mediaWidgetTheme, onThemeChange)
-            ThemeChip("Adattivo", MediaWidgetTheme.AdaptiveGlass, settings.mediaWidgetTheme, onThemeChange)
-            ThemeChip("Album", MediaWidgetTheme.AlbumColor, settings.mediaWidgetTheme, onThemeChange)
-            ThemeChip("Chiaro", MediaWidgetTheme.LightGlass, settings.mediaWidgetTheme, onThemeChange)
-            ThemeChip("Scuro", MediaWidgetTheme.DarkGlass, settings.mediaWidgetTheme, onThemeChange)
-          }
-
-          HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
-          Text("Cover", fontWeight = FontWeight.SemiBold)
-          Spacer(Modifier.height(8.dp))
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            ArtworkChip("Compatta", MediaWidgetArtworkSize.Compact, settings.mediaWidgetArtworkSize, onArtworkSizeChange)
-            ArtworkChip("Bilanciata", MediaWidgetArtworkSize.Balanced, settings.mediaWidgetArtworkSize, onArtworkSizeChange)
-            ArtworkChip("Grande", MediaWidgetArtworkSize.Large, settings.mediaWidgetArtworkSize, onArtworkSizeChange)
-          }
-        }
-      }
-
-      item {
-        ConfigSurface {
-          SectionHeader(
-            icon = Icons.Rounded.Settings,
-            title = "Comportamento",
-            subtitle = "Sessioni musicali, cache e risposta dei controlli.",
-          )
-          Spacer(Modifier.height(12.dp))
-          ConfigSwitchRow("Sorgente", "Mostra Spotify, YouTube Music, Apple Music e simili.", settings.mediaWidgetShowSource, onShowSourceChange)
-          ConfigSwitchRow("Artista", "Mostra la riga secondaria sotto il titolo.", settings.mediaWidgetShowArtist, onShowArtistChange)
-          ConfigSwitchRow("Ultima canzone", "Mantiene titolo e cover quando Samsung nasconde la sessione.", settings.mediaWidgetKeepLastSong, onKeepLastSongChange)
-          ConfigSwitchRow("Risposta immediata", "Mostra subito l'indicatore di comando, senza cambiare l'icona prima della conferma.", settings.mediaWidgetInstantControls, onInstantControlsChange)
-          ConfigSwitchRow("Feedback dinamico", "Ripple, attesa e transizioni morbide del launcher. Attivo di default.", settings.mediaWidgetAnimatedFeedback, onAnimatedFeedbackChange)
-        }
-      }
-
-      item {
-        ConfigSurface {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(if (mediaNotificationAccessGranted) Icons.Rounded.CheckCircle else Icons.Rounded.MusicNote, contentDescription = null)
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                if (mediaNotificationAccessGranted) "Accesso media attivo" else "Accesso media richiesto",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-              )
-              Text(
-                if (mediaNotificationAccessGranted) {
-                  "Il widget puo leggere e controllare le app musicali supportate."
-                } else {
-                  "Serve per leggere titolo, artista, cover e inviare play/pausa."
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-              )
+      val draft = draftJson?.let { Json.decodeFromString<MediaWidgetSettings>(it) }
+      PampaWidgetsTheme(app) {
+        if (draft == null) FluidScreen(title = "Configurazione") { item { Text("Caricamento…") } }
+        else MediaWidgetConfigurationScreen(id, draft, granted, saving, error,
+          onChange = { draftJson = Json.encodeToString(it) },
+          onAccess = { startActivity(NotificationListenerAccess.settingsIntent()) },
+          onCancel = { if (!saving) finish() },
+          onSave = {
+            if (!saving) scope.launch {
+              saving = true
+              try {
+                MediaWidgetUpdateCoordinator.saveSettings(this@MediaWidgetConfigurationActivity, id, draft)
+                setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id))
+                finish()
+              } catch (failure: Exception) { error = "Salvataggio non riuscito. Riprova." }
+              finally { saving = false }
             }
-          }
-          Spacer(Modifier.height(12.dp))
-          OutlinedButton(onClick = onOpenMediaAccessSettings) {
-            Text(if (mediaNotificationAccessGranted) "Gestisci accesso" else "Abilita accesso")
-          }
-        }
+          })
       }
     }
   }
 }
 
 @Composable
-private fun WidgetPreview(settings: AppSettings) {
-  val seed = when (settings.mediaWidgetTheme) {
-    MediaWidgetTheme.AlbumColor -> MaterialTheme.colorScheme.primary
-    MediaWidgetTheme.AdaptiveGlass -> MaterialTheme.colorScheme.secondary
-    else -> MaterialTheme.colorScheme.tertiary
-  }.toArgb()
-  val tokens = mediaWidgetColorTokens(seed, settings.mediaWidgetTheme)
-  val cardColor = Color(tokens.backgroundColor)
-  val textColor = Color(tokens.primaryTextColor)
-  val secondaryTextColor = Color(tokens.secondaryTextColor)
-  val previewControlSurface = Color(tokens.controlSurfaceColor)
-  val previewControlIcon = Color(tokens.controlIconColor)
-  val previewProgressTrack = Color(tokens.progressTrackColor)
-  val previewProgress = Color(tokens.progressColor)
-  Surface(
-    modifier = Modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.extraLarge,
-    color = cardColor,
-  ) {
-    Column(
-      modifier = Modifier.padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-      ) {
-        Box(
-          modifier = Modifier
-            .size(
-              when (settings.mediaWidgetArtworkSize) {
-                MediaWidgetArtworkSize.Compact -> 80.dp
-                MediaWidgetArtworkSize.Balanced -> 92.dp
-                MediaWidgetArtworkSize.Large -> 104.dp
-              },
-            )
-            .clip(MaterialTheme.shapes.large)
-            .background(Color(tokens.artworkFrameColor)),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = textColor)
-        }
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-          if (settings.mediaWidgetShowSource) {
-            Surface(
-              color = Color(tokens.sourcePillColor),
-              shape = MaterialTheme.shapes.extraLarge,
-            ) {
-              Text(
-                "Spotify",
-                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = textColor,
-                fontWeight = FontWeight.Bold,
-              )
-            }
-          }
-          Text(
-            "Titolo canzone",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-          if (settings.mediaWidgetShowArtist) {
-            Text("Artista", color = secondaryTextColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-          }
-        }
+internal fun MediaWidgetConfigurationScreen(id: Int, draft: MediaWidgetSettings, granted: Boolean,
+  saving: Boolean, error: String?, onChange: (MediaWidgetSettings) -> Unit,
+  onAccess: () -> Unit, onCancel: () -> Unit, onSave: () -> Unit) {
+  val context = LocalContext.current
+  val options = remember(id) { AppWidgetManager.getInstance(context).getAppWidgetOptions(id) }
+  val layout = MediaWidgetLayoutSpec.from(options, draft.applyTo())
+  FluidScreen(title = "Il tuo widget", subtitle = "Widget #$id · Le modifiche si applicano con Salva",
+    onBack = onCancel, modifier = Modifier.imePadding(),
+    actions = { FluidButton("Salva", onSave, enabled = !saving, loading = saving) }) {
+    item {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        MediaWidgetPreview(draft, widthDp = layout.widthDp, heightDp = layout.heightDp)
+        Text("${layout.widthDp} × ${layout.heightDp} dp · ${draft.source.label}", style = MaterialTheme.typography.labelMedium)
       }
-
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(4.dp)
-          .clip(MaterialTheme.shapes.extraSmall)
-          .background(previewProgressTrack),
-      ) {
-        Box(
-          modifier = Modifier
-            .fillMaxWidth(0.62f)
-            .height(4.dp)
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(previewProgress),
-        )
+    }
+    item {
+      ConfigGroup("Sorgente", "Ogni widget controlla la propria app.") {
+        ChoiceButtons(MediaSourceMode.entries, draft.source, { onChange(draft.copy(source = it)) }) { it.label }
+        Text(when (draft.source) {
+          MediaSourceMode.Automatic -> "Segue la sessione musicale attiva, con priorità a Spotify e poi Fluidify."
+          else -> "Controlla esclusivamente ${draft.source.label}."
+        }, style = MaterialTheme.typography.bodyMedium)
+        if (!granted) FluidButton("Abilita accesso notifiche", onAccess, style = FluidButtonStyle.Tinted)
+        else if (draft.source.packageName?.let { context.packageManager.getLaunchIntentForPackage(it) == null } == true)
+          Text("${draft.source.label} non è installata su questo dispositivo.", color = MaterialTheme.colorScheme.error)
       }
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Text("In riproduzione", color = secondaryTextColor, style = MaterialTheme.typography.labelMedium)
-        Text("1:14 / 3:42", color = secondaryTextColor, style = MaterialTheme.typography.labelMedium)
-      }
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        PreviewControlIcon(Icons.Rounded.SkipPrevious, previewControlIcon, previewControlSurface)
-        Spacer(Modifier.width(16.dp))
-        Box(
-          modifier = Modifier
-            .size(56.dp)
-            .clip(MaterialTheme.shapes.extraLarge)
-            .background(Color(tokens.playSurfaceColor)),
-          contentAlignment = Alignment.Center,
-        ) {
-          Icon(
-            Icons.Rounded.PlayArrow,
-            contentDescription = null,
-            tint = Color(tokens.playIconColor),
-            modifier = Modifier.size(32.dp),
-          )
+    }
+    item {
+      ConfigGroup("Aspetto", "Colori opachi, cover e dettagli nelle dimensioni della home.") {
+        ChoiceButtons(MediaWidgetTheme.entries, draft.theme, { onChange(draft.copy(theme = it)) }) { it.displayName() }
+        Text("Copertina", style = MaterialTheme.typography.titleMedium)
+        ChoiceButtons(MediaWidgetArtworkSize.entries, draft.artworkSize, { onChange(draft.copy(artworkSize = it)) }) {
+          when (it) { MediaWidgetArtworkSize.Compact -> "Compatta"; MediaWidgetArtworkSize.Balanced -> "Bilanciata"; else -> "Grande" }
         }
-        Spacer(Modifier.width(16.dp))
-        PreviewControlIcon(Icons.Rounded.SkipNext, previewControlIcon, previewControlSurface)
+        ConfigToggle("Mostra sorgente", draft.showSource) { onChange(draft.copy(showSource = it)) }
+        ConfigToggle("Mostra artista", draft.showArtist) { onChange(draft.copy(showArtist = it)) }
+      }
+    }
+    item {
+      ConfigGroup("Comportamento", "La memoria del brano resta separata per app.") {
+        ConfigToggle("Mantieni ultimo brano", draft.keepLastSong) { onChange(draft.copy(keepLastSong = it)) }
+        ConfigToggle("Risposta immediata", draft.instantControls) { onChange(draft.copy(instantControls = it)) }
+        ConfigToggle("Feedback animato", draft.animatedFeedback) { onChange(draft.copy(animatedFeedback = it)) }
+        Text("I controlli aspettano la conferma della sessione. Le animazioni rispettano le impostazioni di sistema.",
+          style = MaterialTheme.typography.bodyMedium)
+      }
+    }
+    item {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        FluidButton("Salva widget", onSave, fillWidth = true, enabled = !saving, loading = saving)
+        FluidButton("Annulla", onCancel, fillWidth = true, enabled = !saving, style = FluidButtonStyle.Plain)
       }
     }
   }
 }
 
 @Composable
-private fun PreviewControlIcon(
-  imageVector: androidx.compose.ui.graphics.vector.ImageVector,
-  tint: Color,
-  surface: Color,
-) {
-  Box(
-    modifier = Modifier
-      .size(44.dp)
-      .clip(MaterialTheme.shapes.extraLarge)
-      .background(surface),
-    contentAlignment = Alignment.Center,
-  ) {
-    Icon(imageVector, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
-  }
-}
-
-@Composable
-private fun ConfigSurface(content: @Composable ColumnScope.() -> Unit) {
-  Surface(
-    modifier = Modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.extraLarge,
-    color = MaterialTheme.colorScheme.surfaceContainer,
-  ) {
-    Column(
-      modifier = Modifier.padding(18.dp),
-      verticalArrangement = Arrangement.spacedBy(0.dp),
-      content = content,
-    )
-  }
-}
-
-@Composable
-private fun SectionHeader(
-  icon: androidx.compose.ui.graphics.vector.ImageVector,
-  title: String,
-  subtitle: String,
-) {
-  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-    Icon(icon, contentDescription = null)
-    Column {
-      Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-      Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+internal fun ConfigGroup(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+  FluidListGroup {
+    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+      Text(title, style = MaterialTheme.typography.titleLarge)
+      Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      content()
     }
   }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ThemeChip(
-  label: String,
-  value: MediaWidgetTheme,
-  selected: MediaWidgetTheme,
-  onThemeChange: (MediaWidgetTheme) -> Unit,
-) {
-  FilterChip(
-    selected = selected == value,
-    onClick = { onThemeChange(value) },
-    label = { Text(label) },
-  )
-}
-
-@Composable
-private fun ArtworkChip(
-  label: String,
-  value: MediaWidgetArtworkSize,
-  selected: MediaWidgetArtworkSize,
-  onArtworkSizeChange: (MediaWidgetArtworkSize) -> Unit,
-) {
-  FilterChip(
-    selected = selected == value,
-    onClick = { onArtworkSizeChange(value) },
-    label = { Text(label) },
-  )
-}
-
-@Composable
-private fun ConfigSwitchRow(
-  title: String,
-  subtitle: String,
-  checked: Boolean,
-  onCheckedChange: (Boolean) -> Unit,
-) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(vertical = 8.dp),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(title, fontWeight = FontWeight.SemiBold)
-      Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-    }
-    Switch(checked = checked, onCheckedChange = onCheckedChange)
+internal fun <T> ChoiceButtons(options: List<T>, selected: T, onSelect: (T) -> Unit, label: (T) -> String) {
+  FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    options.forEach { option -> FluidButton(label(option), { onSelect(option) },
+      style = if (selected == option) FluidButtonStyle.Filled else FluidButtonStyle.Tinted) }
   }
+}
+
+@Composable
+private fun ConfigToggle(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+  Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+    FluidSwitch(checked, onChange, modifier = Modifier.semantics { contentDescription = text })
+  }
+}
+
+internal fun MediaWidgetTheme.displayName() = when (this) {
+  MediaWidgetTheme.SamsungGlass -> "Vetro"
+  MediaWidgetTheme.AdaptiveGlass -> "Adattivo"
+  MediaWidgetTheme.LightGlass -> "Chiaro"
+  MediaWidgetTheme.DarkGlass -> "Scuro"
+  MediaWidgetTheme.AlbumColor -> "Album"
 }

@@ -27,8 +27,14 @@ class MediaWidgetProvider : AppWidgetProvider() {
   }
 
   override fun onDeleted(context: Context, appWidgetIds: IntArray) {
-    MediaWidgetUpdateCoordinator.onWidgetsDeleted(appWidgetIds)
+    val result = goAsync()
+    MediaWidgetUpdateCoordinator.onWidgetsDeleted(context, appWidgetIds) { result.finish() }
     super.onDeleted(context, appWidgetIds)
+  }
+
+  override fun onRestored(context: Context, oldWidgetIds: IntArray, newWidgetIds: IntArray) {
+    val result = goAsync()
+    MediaWidgetUpdateCoordinator.restore(context, oldWidgetIds, newWidgetIds) { result.finish() }
   }
 
   override fun onReceive(context: Context, intent: Intent) {
@@ -36,19 +42,19 @@ class MediaWidgetProvider : AppWidgetProvider() {
     when (intent.action) {
       ActionTogglePlayPause -> {
         val pendingResult = goAsync()
-        MediaWidgetUpdateCoordinator.dispatchControl(context, MediaControlAction.TogglePlayPause) {
+        MediaWidgetUpdateCoordinator.dispatchControl(context, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1), MediaControlAction.TogglePlayPause) {
           pendingResult.finish()
         }
       }
       ActionNext -> {
         val pendingResult = goAsync()
-        MediaWidgetUpdateCoordinator.dispatchControl(context, MediaControlAction.Next) {
+        MediaWidgetUpdateCoordinator.dispatchControl(context, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1), MediaControlAction.Next) {
           pendingResult.finish()
         }
       }
       ActionPrevious -> {
         val pendingResult = goAsync()
-        MediaWidgetUpdateCoordinator.dispatchControl(context, MediaControlAction.Previous) {
+        MediaWidgetUpdateCoordinator.dispatchControl(context, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1), MediaControlAction.Previous) {
           pendingResult.finish()
         }
       }

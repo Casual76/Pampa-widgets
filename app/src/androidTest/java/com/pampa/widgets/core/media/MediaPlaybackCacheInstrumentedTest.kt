@@ -66,7 +66,7 @@ class MediaPlaybackCacheInstrumentedTest {
       val first = snapshot("stable-track", "Stable song", coloredArtwork(Color.YELLOW))
         .copy(positionMs = 20_000L, durationMs = 180_000L, isPlaying = true)
       MediaPlaybackCache.save(context, first)
-      val preferences = context.getSharedPreferences("ignored", Context.MODE_PRIVATE)
+      val preferences = context.getSharedPreferences("media_playback_cache_${MediaPackages.Spotify}", Context.MODE_PRIVATE)
       val firstCheckpoint = preferences.getLong("updated_at", 0L)
       val artworkFile = File(context.filesDir, preferences.getString("artwork_file", "").orEmpty())
       val firstArtworkTimestamp = artworkFile.lastModified()
@@ -99,6 +99,7 @@ class MediaPlaybackCacheInstrumentedTest {
       val migrated = MediaPlaybackCache.read(context)
 
       assertEquals("Legacy song", migrated?.title)
+      assertEquals("Legacy song", MediaPlaybackCache.read(context)?.title)
       assertNull(migrated?.artwork)
       assertFalse(legacyArtwork.exists())
     } finally {
@@ -127,6 +128,27 @@ class MediaPlaybackCacheInstrumentedTest {
     }
   }
 
+  @Test
+  fun twoPackagesKeepIndependentArtworkAndRememberedTargets() {
+    val context = IsolatedCacheContext(InstrumentationRegistry.getInstrumentation().targetContext)
+    context.clear()
+    try {
+      val spotify = snapshot("shared-id", "Spotify song", coloredArtwork(Color.RED))
+      val fluidify = snapshot("shared-id", "Fluidify song", coloredArtwork(Color.BLUE))
+        .copy(packageName = MediaPackages.Fluidify, sourceLabel = "Fluidify")
+      MediaPlaybackCache.save(context, spotify)
+      MediaPlaybackCache.save(context, fluidify)
+      assertEquals("Spotify song", MediaPlaybackCache.read(context, MediaPackages.Spotify)?.title)
+      assertEquals(Color.RED, MediaPlaybackCache.read(context, MediaPackages.Spotify)?.artwork?.getPixel(10, 10))
+      assertEquals("Fluidify song", MediaPlaybackCache.read(context, MediaPackages.Fluidify)?.title)
+      assertEquals(Color.BLUE, MediaPlaybackCache.read(context, MediaPackages.Fluidify)?.artwork?.getPixel(10, 10))
+      assertEquals(MediaPackages.Spotify, MediaPlaybackCache.readRememberedTarget(context, MediaPackages.Spotify)?.packageName)
+      MediaPlaybackCache.save(context, fluidify.copy(mediaId = "next", artwork = null, artworkKey = ""))
+      assertEquals(Color.RED, MediaPlaybackCache.read(context, MediaPackages.Spotify)?.artwork?.getPixel(10, 10))
+      assertNull(MediaPlaybackCache.read(context, MediaPackages.Fluidify)?.artwork)
+    } finally { context.clear() }
+  }
+
   private fun snapshot(mediaId: String, title: String, artwork: Bitmap?) =
     MediaPlaybackSnapshot(
       availability = MediaPlaybackAvailability.Active,
@@ -151,10 +173,13 @@ class MediaPlaybackCacheInstrumentedTest {
     override fun getFilesDir(): File = root
 
     override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
-      baseContext.getSharedPreferences(preferencesName, mode)
+      baseContext.getSharedPreferences("${preferencesName}_$name", mode)
 
     fun clear() {
-      getSharedPreferences("ignored", Context.MODE_PRIVATE).edit().clear().commit()
+      listOf("media_playback_cache", "media_last_target", "media_playback_cache_${MediaPackages.Spotify}",
+        "media_playback_cache_${MediaPackages.Fluidify}").forEach { name ->
+        getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit()
+      }
       root.listFiles()?.forEach(File::delete)
     }
   }

@@ -52,7 +52,7 @@ object MediaPlaybackCache {
     val trackKey = snapshot.trackKey
     if (snapshot.title.isBlank() || snapshot.artist.isBlank() || trackKey.isBlank()) return
 
-    val preferences = preferences(context)
+    val preferences = preferences(context, snapshot.packageName)
     val previousTrackKey = preferences.getString(KeyTrackKey, "").orEmpty()
     val previousArtworkFile = preferences.getString(KeyArtworkFile, "").orEmpty()
     val canReuseArtwork = snapshot.artwork != null &&
@@ -92,6 +92,8 @@ object MediaPlaybackCache {
     ).commit()
 
     if (committed) {
+      context.getSharedPreferences("media_last_target", Context.MODE_PRIVATE).edit()
+        .putString("package", snapshot.packageName).commit()
       if (previousArtworkFile.isNotBlank() && previousArtworkFile != newArtworkFile) {
         File(context.filesDir, previousArtworkFile).delete()
       }
@@ -102,8 +104,8 @@ object MediaPlaybackCache {
   }
 
   @Synchronized
-  fun read(context: Context): MediaPlaybackSnapshot? {
-    val preferences = preferences(context)
+  fun read(context: Context, targetPackage: String? = null): MediaPlaybackSnapshot? {
+    val preferences = preferences(context, targetPackage)
     if (!isFresh(preferences)) return null
     if (preferences.getInt(KeyCacheVersion, 0) != CacheVersion) {
       return migrateLegacyEntry(context, preferences)
@@ -153,8 +155,8 @@ object MediaPlaybackCache {
    * This remains available when the user hides the last song from the widget.
    */
   @Synchronized
-  fun readRememberedTarget(context: Context): RememberedMediaTarget? {
-    val preferences = preferences(context)
+  fun readRememberedTarget(context: Context, targetPackage: String? = null): RememberedMediaTarget? {
+    val preferences = preferences(context, targetPackage)
     if (!isFresh(preferences)) return null
     val packageName = preferences.getString(KeyPackageName, "").orEmpty()
     if (packageName.isBlank()) return null
@@ -290,6 +292,26 @@ object MediaPlaybackCache {
   private fun legacyArtworkFile(context: Context): File =
     File(context.filesDir, LegacyArtworkFileName)
 
-  private fun preferences(context: Context): SharedPreferences =
-    context.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
+  private fun preferences(context: Context, targetPackage: String? = null): SharedPreferences {
+    val legacy = context.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
+    val pkg = targetPackage ?: context.getSharedPreferences("media_last_target", Context.MODE_PRIVATE)
+      .getString("package", null) ?: legacy.getString(KeyPackageName, null)
+    if (pkg.isNullOrBlank()) return legacy
+    val scoped = context.getSharedPreferences("${PreferencesName}_$pkg", Context.MODE_PRIVATE)
+    // Adopt the old entry once, including its track-keyed artwork reference.
+    if (!scoped.contains(KeyCacheVersion) && legacy.getString(KeyPackageName, null) == pkg) {
+      val editor = scoped.edit()
+      legacy.all.forEach { (key, value) -> when (value) {
+        is String -> editor.putString(key, value)
+        is Long -> editor.putLong(key, value)
+        is Int -> editor.putInt(key, value)
+        is Boolean -> editor.putBoolean(key, value)
+      } }
+      if (editor.commit()) {
+        context.getSharedPreferences("media_last_target", Context.MODE_PRIVATE).edit().putString("package", pkg).commit()
+        legacy.edit().clear().commit()
+      }
+    }
+    return scoped
+  }
 }
