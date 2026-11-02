@@ -1,5 +1,7 @@
 package com.pampa.widgets.core.settings
 
+import dev.antigravity.fluidengine.foundation.AccentMode
+
 enum class ThemeMode {
   System,
   Light,
@@ -35,6 +37,14 @@ enum class MediaWidgetArtworkSize {
 data class AppSettings(
   val themeMode: ThemeMode = ThemeMode.System,
   val dynamicColorEnabled: Boolean = true,
+  /**
+   * Da dove viene l'accento. Fino alla 0.4.x non si salvava: lo decideva [dynamicColorEnabled]
+   * (acceso = colori di sistema, spento = il verde dell'app), e chi aggiorna lo ritrova cosi'.
+   */
+  val accentMode: AccentMode = AccentMode.DYNAMIC,
+  val customAccentName: String = DefaultAccentPresetName,
+  val pureBlackEnabled: Boolean = false,
+  val hapticsEnabled: Boolean = true,
   val storeLayout: StoreLayout = StoreLayout.Grid,
   val widgetSortMode: WidgetSortMode = WidgetSortMode.Featured,
   val ignoredStableUpdateVersion: String = "",
@@ -47,3 +57,6 @@ data class AppSettings(
   val mediaWidgetInstantControls: Boolean = false,
   val mediaWidgetAnimatedFeedback: Boolean = true,
 )
+
+/** Il preset che l'engine sceglie quando un nome non c'e': quello di [EngineSettings] di serie. */
+internal const val DefaultAccentPresetName = "fluid"

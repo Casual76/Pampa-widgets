@@ -7,6 +7,9 @@ interface SettingsRepository {
 
   suspend fun setThemeMode(mode: ThemeMode)
   suspend fun setDynamicColorEnabled(enabled: Boolean)
+
+  /** Tema, nero, accento, colore dinamico e aptica, scritti insieme (i campi d'aspetto di [settings]). */
+  suspend fun setAppearance(settings: AppSettings)
   suspend fun setStoreLayout(layout: StoreLayout)
   suspend fun setWidgetSortMode(mode: WidgetSortMode)
   suspend fun setIgnoredStableUpdateVersion(version: String)

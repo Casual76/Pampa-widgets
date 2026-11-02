@@ -51,6 +51,20 @@ internal class PreferencesSettingsRepository(
     dataStore.edit { it[Keys.DynamicColor] = enabled }
   }
 
+  override suspend fun setAppearance(settings: AppSettings) {
+    // Una scrittura sola: tema, nero, accento e aptica cambiano insieme quando la sezione «Aspetto»
+    // ne cambia uno (scegliere i colori di sistema riaccende anche il colore dinamico), e il flusso
+    // non deve passare per uno stato a meta'.
+    dataStore.edit {
+      it[Keys.ThemeMode] = settings.themeMode.name
+      it[Keys.DynamicColor] = settings.dynamicColorEnabled
+      it[Keys.AccentMode] = settings.accentMode.name
+      it[Keys.CustomAccentName] = settings.customAccentName
+      it[Keys.PureBlack] = settings.pureBlackEnabled
+      it[Keys.Haptics] = settings.hapticsEnabled
+    }
+  }
+
   override suspend fun setStoreLayout(layout: StoreLayout) {
     dataStore.edit { it[Keys.StoreLayout] = layout.name }
   }
@@ -98,6 +112,12 @@ internal class PreferencesSettingsRepository(
   internal object Keys {
     val ThemeMode = stringPreferencesKey("theme_mode")
     val DynamicColor = booleanPreferencesKey("dynamic_color")
+
+    // Dalla 0.5.0 (engine 3.0, sezione «Aspetto»). Assenti in chi aggiorna: vedi resolveAccentMode.
+    val AccentMode = stringPreferencesKey("accent_mode")
+    val CustomAccentName = stringPreferencesKey("custom_accent_name")
+    val PureBlack = booleanPreferencesKey("pure_black")
+    val Haptics = booleanPreferencesKey("haptics")
     val StoreLayout = stringPreferencesKey("store_layout")
     val WidgetSortMode = stringPreferencesKey("widget_sort_mode")
     val IgnoredStableUpdateVersion = stringPreferencesKey("ignored_stable_update_version")
@@ -122,10 +142,15 @@ object AppSettingsSnapshotReader {
   }
 }
 
-private fun Preferences.toAppSettings(): AppSettings {
+internal fun Preferences.toAppSettings(): AppSettings {
+  val dynamicColor = this[PreferencesSettingsRepository.Keys.DynamicColor] ?: true
   return AppSettings(
     themeMode = this[PreferencesSettingsRepository.Keys.ThemeMode].toEnumOrDefault(ThemeMode.System),
-    dynamicColorEnabled = this[PreferencesSettingsRepository.Keys.DynamicColor] ?: true,
+    dynamicColorEnabled = dynamicColor,
+    accentMode = resolveAccentMode(this[PreferencesSettingsRepository.Keys.AccentMode], dynamicColor),
+    customAccentName = this[PreferencesSettingsRepository.Keys.CustomAccentName] ?: DefaultAccentPresetName,
+    pureBlackEnabled = this[PreferencesSettingsRepository.Keys.PureBlack] ?: false,
+    hapticsEnabled = this[PreferencesSettingsRepository.Keys.Haptics] ?: true,
     storeLayout = this[PreferencesSettingsRepository.Keys.StoreLayout].toEnumOrDefault(StoreLayout.Grid),
     widgetSortMode = this[PreferencesSettingsRepository.Keys.WidgetSortMode].toEnumOrDefault(WidgetSortMode.Featured),
     ignoredStableUpdateVersion = this[PreferencesSettingsRepository.Keys.IgnoredStableUpdateVersion].orEmpty(),
