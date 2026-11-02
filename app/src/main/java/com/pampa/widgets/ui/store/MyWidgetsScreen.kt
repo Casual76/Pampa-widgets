@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,22 +73,32 @@ internal sealed interface MyWidgetsState {
   data class Loaded(val instances: List<WidgetInstance>) : MyWidgetsState
 }
 
+/** L'ultima lettura delle istanze, tenuta dalla radice: tornando sulla scheda si vede subito. */
+@Composable
+internal fun rememberMyWidgetsState(): MutableState<MyWidgetsState> =
+  remember { mutableStateOf(MyWidgetsState.Loading) }
+
 /**
  * Le istanze del widget presenti sulla home, ognuna con la sua anteprima vera.
  *
- * Si rilegge a ogni ritorno sulla pagina (un widget aggiunto o tolto dalla home nel frattempo) e col
- * gesto di aggiornamento. Mentre legge la prima volta mostra lo scheletro di una card, che respira
- * come quelli delle altre app; se non riesce lo dice in un messaggio che si tocca per riprovare.
+ * Si rilegge a ogni ritorno sulla pagina (un widget aggiunto o tolto dalla home nel frattempo), in
+ * silenzio sopra l'ultima lettura, e col gesto di aggiornamento, che mostra il suo indicatore. Lo
+ * scheletro di una card, che respira come quelli delle altre app, si vede solo la prima volta; se la
+ * lettura non riesce lo dice un messaggio che si tocca per riprovare.
  */
 @Composable
-fun MyWidgetsScreen(app: AppSettings, onCatalog: () -> Unit) {
+internal fun MyWidgetsScreen(
+  app: AppSettings,
+  onCatalog: () -> Unit,
+  stateHolder: MutableState<MyWidgetsState> = rememberMyWidgetsState(),
+) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
-  var state by remember { mutableStateOf<MyWidgetsState>(MyWidgetsState.Loading) }
+  var state by stateHolder
   var refreshing by remember { mutableStateOf(false) }
-  val refresh: () -> Unit = {
+  val read: (Boolean) -> Unit = { byHand ->
     scope.launch {
-      refreshing = state is MyWidgetsState.Loaded
+      refreshing = byHand
       state = try {
         MyWidgetsState.Loaded(readInstances(context, app))
       } catch (failure: Exception) {
@@ -96,7 +107,8 @@ fun MyWidgetsScreen(app: AppSettings, onCatalog: () -> Unit) {
       refreshing = false
     }
   }
-  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refresh() }
+  val refresh: () -> Unit = { read(true) }
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { read(false) }
 
   FluidScreen(
     title = "I miei",
@@ -167,9 +179,9 @@ private fun WidgetInstanceCard(instance: WidgetInstance, app: AppSettings, onCon
           Icon(Icons.Rounded.GraphicEq, contentDescription = null)
         }
         Column(modifier = Modifier.weight(1f)) {
-          Text("Media Controls · #${instance.id}", style = MaterialTheme.typography.titleMedium)
+          Text("Media Controls", style = MaterialTheme.typography.titleMedium)
           Text(
-            text = "${instance.settings.source.label} · ${instance.settings.theme.displayName()}",
+            text = "#${instance.id} · ${instance.settings.source.label} · ${instance.settings.theme.displayName()}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )

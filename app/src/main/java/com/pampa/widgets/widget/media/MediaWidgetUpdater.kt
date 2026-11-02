@@ -342,7 +342,7 @@ object MediaWidgetUpdater {
       },
     )
 
-    applyArtwork(context, views, snapshot, layout, visualPlan)
+    applyArtwork(context, views, snapshot, layout, visualPlan, style)
     applyControls(context, views, snapshot, settings, style, layout, visualPlan, interaction)
     applyProgress(views, snapshot, style, layout)
     applyTime(views, snapshot, layout)
@@ -476,6 +476,7 @@ object MediaWidgetUpdater {
     snapshot: MediaPlaybackSnapshot,
     layout: MediaWidgetLayoutSpec,
     visualPlan: MediaWidgetVisualPlan,
+    style: MediaWidgetStyle,
   ) {
     val artworkDp = layout.artworkDp
     views.setViewLayoutWidth(R.id.media_widget_artwork_frame, artworkDp, TypedValue.COMPLEX_UNIT_DIP)
@@ -490,8 +491,12 @@ object MediaWidgetUpdater {
     } else {
       snapshot.artwork
     }
-    applyArtworkImage(context, views, R.id.media_widget_artwork, first, layout)
-    applyArtworkImage(context, views, R.id.media_widget_artwork_next, second, layout)
+    // La nota al posto della copertina e' quasi bianca: su una superficie chiara (Chiaro, «Come l'app»
+    // nel tema chiaro) spariva nella cornice. Li' prende il colore del testo secondario; sulle
+    // superfici scure resta com'era.
+    val placeholderTint = if (style.darkSurface) null else style.secondaryTextColor
+    applyArtworkImage(context, views, R.id.media_widget_artwork, first, layout, placeholderTint)
+    applyArtworkImage(context, views, R.id.media_widget_artwork_next, second, layout, placeholderTint)
   }
 
   private fun applyArtworkImage(
@@ -500,13 +505,17 @@ object MediaWidgetUpdater {
     imageViewId: Int,
     artwork: Bitmap?,
     layout: MediaWidgetLayoutSpec,
+    placeholderTint: Int?,
   ) {
     if (artwork != null) {
       views.setViewPadding(imageViewId, 0, 0, 0, 0)
+      // Una copertina non si tinge mai: la tinta della nota non deve restare sulla foto dopo.
+      views.setColorStateList(imageViewId, "setImageTintList", null)
       views.setImageViewBitmap(imageViewId, artwork.roundedSquare())
     } else {
       val padding = context.dp((layout.artworkDp * 0.18f).toInt().coerceAtLeast(10))
       views.setViewPadding(imageViewId, padding, padding, padding, padding)
+      views.setColorStateList(imageViewId, "setImageTintList", placeholderTint?.let(ColorStateList::valueOf))
       views.setImageViewResource(imageViewId, R.drawable.ic_widget_music_note)
     }
   }
@@ -1109,6 +1118,7 @@ internal fun mediaWidgetColorTokens(
 private data class MediaWidgetStyle(
   val background: Bitmap,
   val backgroundSignature: String,
+  val darkSurface: Boolean,
   val primaryTextColor: Int,
   val secondaryTextColor: Int,
   val controlIconColor: Int,
@@ -1143,6 +1153,7 @@ private data class MediaWidgetStyle(
       return MediaWidgetStyle(
         background = background,
         backgroundSignature = "${tokens.backgroundColor}:${layout.widthDp}x${layout.heightDp}",
+        darkSurface = tokens.darkSurface,
         primaryTextColor = tokens.primaryTextColor,
         secondaryTextColor = tokens.secondaryTextColor,
         controlIconColor = tokens.controlIconColor,

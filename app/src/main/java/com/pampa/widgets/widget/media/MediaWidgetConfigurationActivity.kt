@@ -50,6 +50,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidChoiceRow
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassButton
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassSize
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -245,7 +246,7 @@ internal fun MediaWidgetConfigurationScreen(
     actions = {
       // Sempre attivo: per un widget appena messo sulla home salvare e' anche confermare i valori di
       // serie, e senza conferma il launcher lo toglie.
-      FluidGlassButton(text = "Salva", onClick = onSave, enabled = !saving)
+      FluidGlassButton(text = "Salva", onClick = onSave, enabled = !saving, size = FluidGlassSize.Compact)
     },
   ) {
     item(key = "preview") {

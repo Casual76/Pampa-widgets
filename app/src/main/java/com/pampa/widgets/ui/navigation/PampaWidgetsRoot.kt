@@ -31,6 +31,7 @@ import com.pampa.widgets.ui.MainUiState
 import com.pampa.widgets.ui.detail.WidgetDetailScreen
 import com.pampa.widgets.ui.settings.SettingsScreen
 import com.pampa.widgets.ui.store.MyWidgetsScreen
+import com.pampa.widgets.ui.store.rememberMyWidgetsState
 import com.pampa.widgets.ui.store.StoreScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBar
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
@@ -117,6 +118,16 @@ fun PampaWidgetsRoot(
     val currentRoute = backStackEntry?.destination?.route
     val selectedRoute = selectedTabFor(currentRoute)
 
+    // A ogni cambio di pagina la barra torna aperta e smette di tenere il vetro fermo: una lista
+    // tolta a meta' gesto non consegna mai il suo lancio, e la barra restava ripiegata (o col vetro
+    // congelato) sulla pagina nuova, che magari non scorre nemmeno.
+    LaunchedEffect(currentRoute) {
+      tabBarScroll.settle()
+      tabBarScroll.expand()
+    }
+
+    val myWidgets = rememberMyWidgetsState()
+
     // Il foglio dell'aggiornamento: lo apre l'avviso del catalogo, si chiude con «Più tardi».
     var updateSheetOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -167,6 +178,7 @@ fun PampaWidgetsRoot(
                 MyWidgetsScreen(
                   app = uiState.settings,
                   onCatalog = { navigateToTab(navController, AppRoutes.Store) },
+                  stateHolder = myWidgets,
                 )
               }
               composable(AppRoutes.Settings) {
@@ -258,7 +270,7 @@ private fun WidgetPinResult.toNotification(id: String): FluidNotification = when
   WidgetPinResult.NotFound -> FluidNotification(
     id = id,
     title = "Widget non trovato",
-    message = "Questo widget non e' piu' nel catalogo.",
+    message = "Questo widget non è più nel catalogo.",
     tone = FluidNotificationTone.Error,
   )
   WidgetPinResult.NoProvider -> FluidNotification(

@@ -31,7 +31,6 @@ import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 /**
@@ -60,7 +59,7 @@ fun WidgetDetailScreen(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           FluidEmptyState(
             title = "Widget non disponibile",
-            detail = "Non e' piu' nel catalogo di questa versione dell'app.",
+            detail = "Non è più nel catalogo di questa versione dell'app.",
             illustration = {
               Icon(Icons.Rounded.Widgets, contentDescription = null, modifier = Modifier.size(64.dp))
             },
@@ -84,7 +83,7 @@ fun WidgetDetailScreen(
     item(key = "features") {
       FluidListGroup(glass = true) {
         FeatureRow(Icons.Rounded.AspectRatio, "Da 2 × 2 a tutta pagina",
-          "Si adatta alla misura del launcher: piu' spazio vuol dire copertina piu' grande e piu' comandi.")
+          "Si adatta alla misura del launcher: più spazio vuol dire copertina più grande e più comandi.")
         FluidListDivider()
         FeatureRow(Icons.Rounded.Speaker, "Una sorgente per widget",
           "Automatica segue la sessione attiva; oppure dedica un widget a Spotify e uno a Fluidify.")
@@ -101,16 +100,10 @@ fun WidgetDetailScreen(
     item(key = "access") {
       FluidListGroup(glass = true) {
         FluidListRow(
-          title = if (mediaNotificationAccessGranted) "Accesso attivo" else "Accesso richiesto",
+          title = if (mediaNotificationAccessGranted) "Accesso attivo" else "Accesso da abilitare",
           subtitle = "L'accesso alle notifiche permette di leggere il brano e di controllare la sessione Android.",
           tone = if (mediaNotificationAccessGranted) FluidTone.Success else FluidTone.Warning,
           leading = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
-          badge = {
-            FluidStatusBadge(
-              label = if (mediaNotificationAccessGranted) "Attivo" else "Da abilitare",
-              tone = if (mediaNotificationAccessGranted) FluidTone.Success else FluidTone.Warning,
-            )
-          },
           onClick = onOpenMediaAccessSettings,
         )
       }

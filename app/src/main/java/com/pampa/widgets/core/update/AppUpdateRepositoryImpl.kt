@@ -150,7 +150,7 @@ internal fun Json.parsePampaStableUpdate(rawManifest: String): AvailableAppUpdat
 internal fun Json.parsePampaStoreEntry(rawManifest: String): PampaStoreEntry {
   val manifest = decodeFromString<PampaStoreManifest>(rawManifest.escapeBareControlCharactersInJsonStrings())
   return manifest.apps.firstOrNull { it.id == PampaWidgetsAppId }
-    ?: error("Pampa Widgets non e' presente nell'indice Pampa Store.")
+    ?: error("Pampa Widgets non è presente nell'indice Pampa Store.")
 }
 
 private fun String.escapeBareControlCharactersInJsonStrings(): String {
@@ -512,7 +512,7 @@ private fun Int.toInstallFailureMessage(systemMessage: String): String = when (t
   PackageInstaller.STATUS_FAILURE_ABORTED -> "Installazione annullata dall'utente."
   PackageInstaller.STATUS_FAILURE_BLOCKED -> "Android ha bloccato l'installazione dell'APK."
   PackageInstaller.STATUS_FAILURE_CONFLICT -> "Conflitto di firma o versione con l'app installata."
-  PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "L'APK non e' compatibile con questo dispositivo."
+  PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "L'APK non è compatibile con questo dispositivo."
   PackageInstaller.STATUS_FAILURE_INVALID -> "Android considera l'APK non valido o non installabile."
   PackageInstaller.STATUS_FAILURE_STORAGE -> "Spazio insufficiente per completare l'installazione."
   else -> systemMessage.ifBlank { "Installazione non riuscita." }

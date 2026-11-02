@@ -36,7 +36,6 @@ import dev.antigravity.fluidengine.ui.fluid.fluidUpdateSection
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 /** Dove stanno i sorgenti: la GPL-3.0 chiede che chi ha l'APK sappia dove trovarli. */
@@ -67,19 +66,15 @@ fun SettingsScreen(
       FluidListGroup(glass = true) {
         FluidListRow(
           title = "Accesso alle notifiche",
+          // Lo stato sta nella prima parola e nel colore della piastrella: un badge accanto al titolo
+          // lo mandava a capo su due righe e stringeva il resto in una colonna.
           subtitle = if (granted) {
-            "Il widget legge brano e stato della riproduzione e invia i comandi all'app che suona."
+            "Attivo. Il widget legge brano e stato della riproduzione e invia i comandi all'app che suona."
           } else {
-            "Serve al widget per Spotify, Fluidify e i suoi pulsanti. Tocca per abilitarlo."
+            "Da abilitare. Serve al widget per Spotify, Fluidify e i suoi pulsanti: tocca per aprire le impostazioni."
           },
           tone = if (granted) FluidTone.Success else FluidTone.Warning,
           leading = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
-          badge = {
-            FluidStatusBadge(
-              label = if (granted) "Attivo" else "Da abilitare",
-              tone = if (granted) FluidTone.Success else FluidTone.Warning,
-            )
-          },
           onClick = actions.onOpenMediaAccessSettings,
           modifier = Modifier.testTag("settings-media-access"),
         )
@@ -102,7 +97,7 @@ fun SettingsScreen(
           FluidChoiceRow(
             title = if (option == StoreLayout.Grid) "Griglia" else "Lista",
             subtitle = if (option == StoreLayout.Grid) {
-              "Card affiancate quando lo schermo e' largo."
+              "Card affiancate quando lo schermo è largo."
             } else {
               "Una card per riga, sempre."
             },

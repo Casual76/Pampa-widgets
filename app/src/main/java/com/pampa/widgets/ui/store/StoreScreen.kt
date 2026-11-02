@@ -139,7 +139,7 @@ fun StoreScreen(
             detail = if (searching) {
               "Nessuno dei ${uiState.widgets.size} widget corrisponde alla ricerca."
             } else {
-              "Lo scaffale e' pronto: i widget arrivano con i prossimi aggiornamenti dell'app."
+              "Lo scaffale è pronto: i widget arrivano con i prossimi aggiornamenti dell'app."
             },
             illustration = {
               Icon(Icons.Rounded.Widgets, contentDescription = null, modifier = Modifier.size(64.dp))

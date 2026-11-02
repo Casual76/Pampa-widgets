@@ -73,7 +73,7 @@ Goal: make the Media Controls widget polished and robust from a 2x2 compact widg
 
 The complete setting space is the cross-product of:
 
-- Theme: SamsungGlass, AdaptiveGlass, LightGlass, DarkGlass, AlbumColor.
+- Theme: SamsungGlass, AdaptiveGlass, LightGlass, DarkGlass, AlbumColor, AppTheme (0.5.0: «Come l'app», the app palette from `fluidColorScheme`, light or dark like the app or the phone, with the app accent).
 - Artwork size: Compact, Balanced, Large.
 - Boolean mask: ShowSource, ShowArtist, KeepLastSong, InstantControls, AnimatedFeedback.
 - Widget size profile: S0 2x2 mini, S1 compact 2x2/2x3, S2 default 3x2, S3 wide, S4 tall, S5 full page.
@@ -81,8 +81,8 @@ The complete setting space is the cross-product of:
 - Artwork state: real artwork, missing artwork.
 - Capability state: previous enabled/disabled, next enabled/disabled, play enabled/disabled.
 
-Total setting-only combinations: 5 themes x 3 artwork sizes x 32 boolean masks = 480.
-Total core visual combinations before media/capability states: 480 x 6 size profiles = 2,880.
+Total setting-only combinations: 6 themes x 3 artwork sizes x 32 boolean masks = 576.
+Total core visual combinations before media/capability states: 576 x 6 size profiles = 3,456 (`MediaWidgetLayoutSpecTest`).
 
 ## Boolean masks to test visually for each theme/artwork pair
 
@@ -149,6 +149,9 @@ The automated layout matrix covers every theme/artwork pair; these remain open f
 - [ ] AlbumColor x Compact
 - [ ] AlbumColor x Balanced
 - [ ] AlbumColor x Large
+- [ ] AppTheme (light app) x Large
+- [ ] AppTheme (dark app) x Large
+- [ ] AppTheme following the phone: switch the system theme with the widget on the home screen
 
 ## Media state matrix for visual QA
 
