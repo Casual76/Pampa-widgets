@@ -80,6 +80,8 @@ internal data class MediaWidgetRenderSignature(
   val animatedFeedback: Boolean,
   val layout: MediaWidgetLayoutSpec,
   val interaction: MediaWidgetInteraction?,
+  /** I colori dell'app, per un widget che li segue: vuoto per i temi presi dalla copertina. */
+  val appearance: String = "",
 )
 
 private data class MediaWidgetVisualPlan(
@@ -132,7 +134,7 @@ object MediaWidgetUpdater {
       heightDp = heightDp,
       settings = settings,
     )
-    val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout)
+    val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout, appTokensFor(context, settings))
     return buildRemoteViews(
       context = context,
       snapshot = snapshot,
@@ -168,6 +170,7 @@ object MediaWidgetUpdater {
   ) {
     if (appWidgetIds.isEmpty()) return
     val elapsedRealtimeMs = SystemClock.elapsedRealtime()
+    val appTokens = appTokensFor(context, settings)
     appWidgetIds.forEach { widgetId ->
       val layout = MediaWidgetLayoutSpec.from(appWidgetManager.getAppWidgetOptions(widgetId), settings)
       val renderSignature = mediaWidgetRenderSignature(
@@ -176,13 +179,14 @@ object MediaWidgetUpdater {
         layout = layout,
         interaction = interaction,
         elapsedRealtimeMs = elapsedRealtimeMs,
+        appearance = appTokens?.appearanceSignature().orEmpty(),
       )
       val alreadyRendered = synchronized(stateLock) {
         visualStates[widgetId]?.renderSignature == renderSignature
       }
       if (alreadyRendered) return@forEach
 
-      val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout)
+      val style = MediaWidgetStyle.from(context, snapshot.artwork, settings, layout, appTokens)
       val visualPlan = visualPlanFor(
         widgetId = widgetId,
         snapshot = snapshot,
@@ -789,6 +793,7 @@ internal fun mediaWidgetRenderSignature(
   layout: MediaWidgetLayoutSpec,
   interaction: MediaWidgetInteraction?,
   elapsedRealtimeMs: Long,
+  appearance: String = "",
 ): MediaWidgetRenderSignature {
   val playbackAnchorMs = if (snapshot.isPlaying && snapshot.playbackSpeed > 0f) {
     elapsedRealtimeMs - (snapshot.positionMs / snapshot.playbackSpeed).toLong()
@@ -820,8 +825,13 @@ internal fun mediaWidgetRenderSignature(
     animatedFeedback = settings.mediaWidgetAnimatedFeedback,
     layout = layout,
     interaction = interaction,
+    appearance = appearance,
   )
 }
+
+/** I colori dell'app per un widget che li segue, o null per i temi presi dalla copertina. */
+private fun appTokensFor(context: Context, settings: AppSettings): MediaWidgetColorTokens? =
+  if (settings.mediaWidgetTheme == MediaWidgetTheme.AppTheme) mediaWidgetAppTokens(context, settings) else null
 
 internal enum class MediaWidgetSizeClass {
   Mini,
@@ -1118,9 +1128,10 @@ private data class MediaWidgetStyle(
       artwork: Bitmap?,
       settings: AppSettings,
       layout: MediaWidgetLayoutSpec,
+      appTokens: MediaWidgetColorTokens? = null,
     ): MediaWidgetStyle {
-      val palette = extractPalette(artwork)
-      val tokens = mediaWidgetColorTokens(palette.vibrant, settings.mediaWidgetTheme)
+      // Con i colori dell'app la copertina non decide niente, e non serve leggerne la tavolozza.
+      val tokens = appTokens ?: mediaWidgetColorTokens(extractPalette(artwork).vibrant, settings.mediaWidgetTheme)
       val density = context.resources.displayMetrics.density
       val backgroundSize = widgetBackgroundBitmapSize(layout.widthDp, layout.heightDp, density)
       val background = createBackgroundBitmap(
@@ -1386,6 +1397,9 @@ internal fun Int.toWidgetBackgroundColor(theme: MediaWidgetTheme): Int {
     MediaWidgetTheme.LightGlass -> source.lighten(0.68f).blendWith(Color.rgb(250, 251, 246), 0.24f)
     MediaWidgetTheme.DarkGlass -> source.darken(0.48f).blendWith(Color.rgb(18, 22, 20), 0.30f)
     MediaWidgetTheme.AlbumColor -> source
+    // Non viene dalla copertina: i colori li da' mediaWidgetAppTokens. Qui solo per non lasciare un
+    // ramo scoperto, con la tinta del tema di serie.
+    MediaWidgetTheme.AppTheme -> source.lighten(0.42f)
   }
   return when {
     theme == MediaWidgetTheme.AlbumColor && color.luminance() > 0.82f -> color.darken(0.08f)

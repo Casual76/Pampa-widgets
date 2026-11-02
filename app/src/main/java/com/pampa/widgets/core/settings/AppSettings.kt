@@ -25,6 +25,13 @@ enum class MediaWidgetTheme {
   LightGlass,
   DarkGlass,
   AlbumColor,
+
+  /**
+   * I colori dell'app: chiaro o scuro come l'app (o come il telefono, se l'app segue il sistema) e
+   * l'accento scelto in Aspetto. In coda all'enum perche' i valori si salvano per nome e un'istanza
+   * salvata prima della 0.5.0 deve leggersi com'era.
+   */
+  AppTheme,
 }
 
 @kotlinx.serialization.Serializable

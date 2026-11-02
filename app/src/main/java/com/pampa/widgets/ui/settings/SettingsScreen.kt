@@ -1,366 +1,207 @@
-@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-
 package com.pampa.widgets.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.DarkMode
-import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.InstallMobile
-import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Gavel
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.PhoneAndroid
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SortByAlpha
-import androidx.compose.material.icons.rounded.SystemUpdateAlt
-import androidx.compose.material.icons.rounded.ViewAgenda
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.pampa.widgets.BuildConfig
+import com.pampa.widgets.core.design.PampaBrand
 import com.pampa.widgets.core.settings.StoreLayout
-import com.pampa.widgets.core.settings.ThemeMode
 import com.pampa.widgets.core.settings.WidgetSortMode
-import com.pampa.widgets.core.update.AppUpdateInstallState
-import com.pampa.widgets.core.update.isBusy
+import com.pampa.widgets.core.settings.toEngineSettings
+import com.pampa.widgets.ui.MainActions
 import com.pampa.widgets.ui.MainUiState
-import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import dev.antigravity.fluidengine.ui.fluid.FluidButton
-import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import com.pampa.widgets.widget.media.ChoiceButtons
-import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
+import dev.antigravity.fluidengine.foundation.EngineBuild
+import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
+import dev.antigravity.fluidengine.ui.fluid.FluidChoiceRow
+import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
+import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidToggleRow
+import dev.antigravity.fluidengine.ui.fluid.fluidAppearanceSection
 import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
+import dev.antigravity.fluidengine.ui.fluid.fluidUpdateSection
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
+/** Dove stanno i sorgenti: la GPL-3.0 chiede che chi ha l'APK sappia dove trovarli. */
+internal const val SourceRepositoryUrl = "https://github.com/Casual76/Pampa-widgets"
+internal const val LicenseUrl = "$SourceRepositoryUrl/blob/main/LICENSE"
+
+/**
+ * Le impostazioni, nella grammatica delle impostazioni dell'engine: intestazioni quiete, gruppi di
+ * vetro sul fondale, righe che sono il controllo (la riga **e'** l'interruttore, la scelta ha la spunta
+ * a destra). Aspetto e aggiornamenti sono le sezioni dell'engine, le stesse delle altre app: qui c'e'
+ * solo quello che e' di Pampa Widgets — l'accesso alle sessioni media, il catalogo, le informazioni.
+ */
 @Composable
 fun SettingsScreen(
   uiState: MainUiState,
-  onThemeModeChange: (ThemeMode) -> Unit,
-  onDynamicColorChange: (Boolean) -> Unit,
-  onStoreLayoutChange: (StoreLayout) -> Unit,
-  onWidgetSortModeChange: (WidgetSortMode) -> Unit,
-  onAutomaticUpdateChecksChange: (Boolean) -> Unit,
-  onCheckUpdate: () -> Unit,
-  onInstallUpdate: () -> Unit,
-  onIgnoreUpdate: () -> Unit,
-  mediaNotificationAccessGranted: Boolean,
-  onOpenMediaAccessSettings: () -> Unit,
+  actions: MainActions,
 ) {
-  // Il titolo non e' piu' una voce della lista: lo tiene FluidScreen, che lo fa ritirare nella
-  // barra mentre si scorre invece di lasciarlo scorrere via. La barra e' in vetro e il bordo in
-  // fondo cede: sono le tre cose che arrivano dal componente e non dal tema.
+  val settings = uiState.settings
   FluidScreen(
     modifier = Modifier.testTag("settings-screen"),
     title = "Impostazioni",
     subtitle = "Aspetto, accesso media e aggiornamenti.",
+    ambient = remember { FluidAmbient(tone = FluidHeroTone.Tertiary, motif = FluidHeroMotif.Ticks) },
   ) {
-
-    item {
-      UpdateSection(
-        uiState = uiState,
-        onCheckUpdate = onCheckUpdate,
-        onInstallUpdate = onInstallUpdate,
-        onIgnoreUpdate = onIgnoreUpdate,
-        onAutomaticUpdateChecksChange = onAutomaticUpdateChecksChange,
-      )
-    }
-
-    item {
-      MediaAccessSection(
-        granted = mediaNotificationAccessGranted,
-        onOpenMediaAccessSettings = onOpenMediaAccessSettings,
-      )
-    }
-
-    item {
-      AppearanceSection(
-        themeMode = uiState.settings.themeMode,
-        dynamicColorEnabled = uiState.settings.dynamicColorEnabled,
-        onThemeModeChange = onThemeModeChange,
-        onDynamicColorChange = onDynamicColorChange,
-      )
-    }
-
-    item {
-      StoreSection(
-        layout = uiState.settings.storeLayout,
-        sortMode = uiState.settings.widgetSortMode,
-        onStoreLayoutChange = onStoreLayoutChange,
-        onWidgetSortModeChange = onWidgetSortModeChange,
-      )
-    }
-
-    item {
-      AppInfoSection(widgetCount = uiState.widgets.size)
-    }
-
-    // Le opere di terze parti che il Fluid Engine porta dentro l'APK — il vetro di Kyant e il font
-    // Inter. Le rispettive licenze chiedono che l'avviso viaggi con la distribuzione, e un file di
-    // licenza in un repository non e' la distribuzione. L'elenco vive nell'engine, cosi' non resta
-    // indietro qui mentre viene aggiornato altrove.
-    fluidLicensesSection()
-  }
-}
-
-@Composable
-private fun MediaAccessSection(
-  granted: Boolean,
-  onOpenMediaAccessSettings: () -> Unit,
-) {
-  SettingsSurface {
-    SectionTitle(
-      icon = Icons.Rounded.MusicNote,
-      title = "Controlli media",
-      subtitle = if (granted) {
-        "Accesso alle sessioni attive abilitato."
-      } else {
-        "Serve per Spotify, Fluidify e i pulsanti del widget."
-      },
-    )
-    Spacer(Modifier.height(14.dp))
-    Text(
-      text = if (granted) {
-        "Il widget puo leggere titolo, artista, stato play/pausa e inviare i comandi alla sessione multimediale attiva."
-      } else {
-        "Abilita Pampa Widgets in Accesso notifiche. Android usa questo canale per esporre le sessioni multimediali delle app come Spotify."
-      },
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(Modifier.height(14.dp))
-    FluidButton(if (granted) "Gestisci accesso" else "Abilita accesso", onOpenMediaAccessSettings, style = FluidButtonStyle.Tinted)
-  }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun UpdateSection(
-  uiState: MainUiState,
-  onCheckUpdate: () -> Unit,
-  onInstallUpdate: () -> Unit,
-  onIgnoreUpdate: () -> Unit,
-  onAutomaticUpdateChecksChange: (Boolean) -> Unit,
-) {
-  SettingsSurface {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Icon(Icons.Rounded.SystemUpdateAlt, contentDescription = null)
-      Column(modifier = Modifier.weight(1f)) {
-        Text("Aggiornamenti", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(
-          "Da Pampa Store tramite release GitHub.",
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
+    item(key = "media-header") { FluidSectionHeader(title = "Controlli media") }
+    item(key = "media") {
+      val granted = uiState.mediaNotificationAccessGranted
+      FluidListGroup(glass = true) {
+        FluidListRow(
+          title = "Accesso alle notifiche",
+          subtitle = if (granted) {
+            "Il widget legge brano e stato della riproduzione e invia i comandi all'app che suona."
+          } else {
+            "Serve al widget per Spotify, Fluidify e i suoi pulsanti. Tocca per abilitarlo."
+          },
+          tone = if (granted) FluidTone.Success else FluidTone.Warning,
+          leading = { Icon(Icons.Rounded.MusicNote, contentDescription = null) },
+          badge = {
+            FluidStatusBadge(
+              label = if (granted) "Attivo" else "Da abilitare",
+              tone = if (granted) FluidTone.Success else FluidTone.Warning,
+            )
+          },
+          onClick = actions.onOpenMediaAccessSettings,
+          modifier = Modifier.testTag("settings-media-access"),
         )
       }
-      if (uiState.isCheckingUpdate) {
-        LoadingIndicator(modifier = Modifier.size(36.dp))
+    }
+
+    fluidAppearanceSection(
+      settings = settings.toEngineSettings(),
+      onSettingsChange = actions.onAppearanceChange,
+      brand = PampaBrand,
+      glass = true,
+      footnote = "Un widget con i colori «Come l'app» segue tema e accento scelti qui.",
+    )
+
+    item(key = "catalog-header") { FluidSectionHeader(title = "Catalogo") }
+    item(key = "catalog-layout") {
+      FluidListGroup(modifier = Modifier.selectableGroup(), glass = true) {
+        StoreLayout.entries.forEachIndexed { index, option ->
+          if (index > 0) FluidListDivider()
+          FluidChoiceRow(
+            title = if (option == StoreLayout.Grid) "Griglia" else "Lista",
+            subtitle = if (option == StoreLayout.Grid) {
+              "Card affiancate quando lo schermo e' largo."
+            } else {
+              "Una card per riga, sempre."
+            },
+            selected = settings.storeLayout == option,
+            onSelect = { if (settings.storeLayout != option) actions.onStoreLayoutChange(option) },
+            leading = {
+              Icon(
+                if (option == StoreLayout.Grid) Icons.Rounded.GridView else Icons.AutoMirrored.Rounded.ViewList,
+                contentDescription = null,
+              )
+            },
+          )
+        }
+      }
+    }
+    item(key = "catalog-sort") {
+      FluidListGroup(modifier = Modifier.selectableGroup(), glass = true) {
+        WidgetSortMode.entries.forEachIndexed { index, option ->
+          if (index > 0) FluidListDivider()
+          FluidChoiceRow(
+            title = if (option == WidgetSortMode.Featured) "In evidenza" else "Per nome",
+            subtitle = if (option == WidgetSortMode.Featured) {
+              "Prima quelli disponibili, poi per categoria."
+            } else {
+              "In ordine alfabetico."
+            },
+            selected = settings.widgetSortMode == option,
+            onSelect = { if (settings.widgetSortMode != option) actions.onWidgetSortModeChange(option) },
+            leading = {
+              Icon(
+                if (option == WidgetSortMode.Featured) Icons.Rounded.Star else Icons.Rounded.SortByAlpha,
+                contentDescription = null,
+              )
+            },
+          )
+        }
       }
     }
 
-    Spacer(Modifier.height(16.dp))
-    SettingSwitchRow(
-      title = "Controllo automatico",
-      subtitle = "Cerca update all'avvio senza interrompere l'uso.",
-      checked = uiState.settings.automaticUpdateChecksEnabled,
-      onCheckedChange = onAutomaticUpdateChecksChange,
+    val update = uiState.update
+    fluidUpdateSection(
+      state = update.ui,
+      onCheck = actions.onCheckUpdate,
+      onInstall = actions.onInstallUpdate,
+      currentVersion = BuildConfig.VERSION_NAME,
+      lastCheckedAtMillis = update.lastCheckedAtMillis,
+      onSkip = actions.onIgnoreUpdate,
+      glass = true,
     )
-    HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
-
-    UpdateStateContent(
-      state = uiState.updateInstallState,
-      availableVersion = uiState.availableUpdate?.version,
-      changelog = uiState.availableUpdate?.changelog.orEmpty(),
-    )
-
-    Spacer(Modifier.height(14.dp))
-    FlowRow(
-      horizontalArrangement = Arrangement.spacedBy(10.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-      FluidButton("Controlla", onCheckUpdate, style = FluidButtonStyle.Tinted,
-        enabled = !uiState.isCheckingUpdate && !uiState.updateInstallState.isBusy())
-      FluidButton("Installa", onInstallUpdate,
-        enabled = uiState.availableUpdate != null && !uiState.updateInstallState.isBusy())
-      if (uiState.availableUpdate != null) FluidButton("Ignora versione", onIgnoreUpdate, style = FluidButtonStyle.Plain)
-
+    item(key = "update-auto") {
+      FluidListGroup(glass = true) {
+        FluidToggleRow(
+          title = "Controllo automatico",
+          subtitle = "Cerca una versione nuova all'avvio, senza interrompere.",
+          checked = settings.automaticUpdateChecksEnabled,
+          onCheckedChange = actions.onAutomaticUpdateChecksChange,
+        )
+      }
     }
-  }
-}
-
-@Composable
-private fun UpdateStateContent(
-  state: AppUpdateInstallState,
-  availableVersion: String?,
-  changelog: String,
-) {
-  Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    val title = when (state) {
-      AppUpdateInstallState.Idle -> availableVersion?.let { "Versione $it disponibile" } ?: "App aggiornata"
-      is AppUpdateInstallState.Downloading -> "Download ${(state.progress * 100).toInt()}%"
-      is AppUpdateInstallState.Verifying -> state.message
-      is AppUpdateInstallState.AwaitingUserAction -> state.message
-      is AppUpdateInstallState.Installing -> state.message
-      is AppUpdateInstallState.Installed -> "Aggiornamento installato"
-      is AppUpdateInstallState.Error -> "Aggiornamento non completato"
+    item(key = "update-footnote") {
+      FluidSectionFootnote(text = "Le versioni arrivano dal Pampa Store, tramite le release su GitHub.")
     }
-    Text(title, fontWeight = FontWeight.SemiBold)
-    Text(
-      text = when (state) {
-        is AppUpdateInstallState.Downloading ->
-          "${formatBytes(state.downloadedBytes)} / ${formatBytes(state.totalBytes)}"
-        is AppUpdateInstallState.Error -> state.message
-        is AppUpdateInstallState.Installed -> "Aggiornamento pronto"
-        else -> changelog.ifBlank { "Versione installata: ${BuildConfig.VERSION_NAME}" }
-      },
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      style = MaterialTheme.typography.bodyMedium,
-    )
-  }
-}
 
-@Composable
-private fun AppearanceSection(
-  themeMode: ThemeMode,
-  dynamicColorEnabled: Boolean,
-  onThemeModeChange: (ThemeMode) -> Unit,
-  onDynamicColorChange: (Boolean) -> Unit,
-) {
-  SettingsSurface {
-    SectionTitle(icon = Icons.Rounded.AutoAwesome, title = "Aspetto", subtitle = "Fluid Engine e colori dinamici.")
-    Spacer(Modifier.height(14.dp))
-    ChoiceButtons(ThemeMode.entries, themeMode, onThemeModeChange) {
-      when (it) { ThemeMode.System -> "Sistema"; ThemeMode.Light -> "Chiaro"; ThemeMode.Dark -> "Scuro" }
+    item(key = "about-header") { FluidSectionHeader(title = "Informazioni") }
+    item(key = "about") {
+      FluidListGroup(glass = true) {
+        FluidListRow(
+          title = "Pampa Widgets",
+          subtitle = "Versione ${BuildConfig.VERSION_NAME} · canale stabile",
+          disclosure = false,
+        )
+        FluidListDivider()
+        FluidListRow(title = "Fluid Engine", subtitle = EngineBuild.VERSION, disclosure = false)
+        FluidListDivider()
+        FluidListRow(
+          title = "Widget nel catalogo",
+          subtitle = uiState.widgets.size.toString(),
+          disclosure = false,
+        )
+        FluidListDivider()
+        FluidListRow(
+          title = "Licenza",
+          subtitle = "GNU GPL 3.0: software libero, con i sorgenti per chi ha l'app.",
+          leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
+          onClick = { actions.onOpenUrl(LicenseUrl) },
+        )
+        FluidListDivider()
+        FluidListRow(
+          title = "Codice sorgente",
+          subtitle = "github.com/Casual76/Pampa-widgets",
+          leading = { Icon(Icons.Rounded.Code, contentDescription = null) },
+          onClick = { actions.onOpenUrl(SourceRepositoryUrl) },
+        )
+      }
     }
-    HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
-    SettingSwitchRow(
-      title = "Colori dinamici",
-      subtitle = "Usa la palette del dispositivo quando disponibile.",
-      checked = dynamicColorEnabled,
-      onCheckedChange = onDynamicColorChange,
-    )
-  }
-}
 
-@Composable
-private fun StoreSection(
-  layout: StoreLayout,
-  sortMode: WidgetSortMode,
-  onStoreLayoutChange: (StoreLayout) -> Unit,
-  onWidgetSortModeChange: (WidgetSortMode) -> Unit,
-) {
-  SettingsSurface {
-    SectionTitle(icon = Icons.Rounded.GridView, title = "Catalogo", subtitle = "Scegli come esplorare i widget.")
-    Spacer(Modifier.height(14.dp))
-    ChoiceButtons(StoreLayout.entries, layout, onStoreLayoutChange) { if (it == StoreLayout.Grid) "Griglia" else "Lista" }
-    Spacer(Modifier.height(12.dp))
-    ChoiceButtons(WidgetSortMode.entries, sortMode, onWidgetSortModeChange) { if (it == WidgetSortMode.Featured) "In evidenza" else "Nome" }
-  }
-}
-
-@Composable
-private fun AppInfoSection(widgetCount: Int) {
-  SettingsSurface {
-    SectionTitle(icon = Icons.Rounded.Download, title = "App", subtitle = "Pampa Widgets ${BuildConfig.VERSION_NAME}")
-    Spacer(Modifier.height(12.dp))
-    InfoRow(label = "Fluid Engine", value = "1.30.1")
-    InfoRow(label = "Widget registrati", value = widgetCount.toString())
-    InfoRow(label = "Canale", value = "Stable")
-  }
-}
-
-@Composable
-private fun SettingsSurface(content: @Composable ColumnScope.() -> Unit) {
-  FluidListGroup {
-    Column(
-      modifier = Modifier.padding(18.dp),
-      content = content,
-    )
-  }
-}
-
-@Composable
-private fun SectionTitle(
-  icon: androidx.compose.ui.graphics.vector.ImageVector,
-  title: String,
-  subtitle: String,
-) {
-  Row(
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Icon(icon, contentDescription = null)
-    Column {
-      Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-      Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-  }
-}
-
-@Composable
-private fun SettingSwitchRow(
-  title: String,
-  subtitle: String,
-  checked: Boolean,
-  onCheckedChange: (Boolean) -> Unit,
-) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
-  ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(title, fontWeight = FontWeight.SemiBold)
-      Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-    }
-    FluidSwitch(checked = checked, onCheckedChange = onCheckedChange)
-  }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(value, fontWeight = FontWeight.SemiBold)
-  }
-}
-
-private fun formatBytes(bytes: Long): String {
-  if (bytes <= 0L) return "-"
-  val mib = bytes / (1024f * 1024f)
-  return if (mib >= 1f) {
-    "%.1f MB".format(mib)
-  } else {
-    "${bytes / 1024L} KB"
+    // Le opere di terze parti che il Fluid Engine porta dentro l'APK — il vetro di Kyant, il font
+    // Inter e, dalla 3.0, i pulsanti e le pagine di LibrePods (GPL-3.0). L'avviso deve viaggiare con
+    // la distribuzione: un file in un repository non e' la distribuzione.
+    fluidLicensesSection()
   }
 }

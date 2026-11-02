@@ -86,7 +86,9 @@ class MediaWidgetLayoutSpecTest {
       }
     }
 
-    assertEquals(5 * 3 * 32 * 6, checked)
+    // Sei temi dalla 0.5.0 (il sesto, «Come l'app», prende i colori dall'app e non dalla copertina).
+    assertEquals(MediaWidgetTheme.entries.size * 3 * 32 * 6, checked)
+    assertEquals(6, MediaWidgetTheme.entries.size)
   }
 
   @Test

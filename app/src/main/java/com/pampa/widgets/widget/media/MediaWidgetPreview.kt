@@ -12,12 +12,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.pampa.widgets.core.media.MediaPlaybackAvailability
 import com.pampa.widgets.core.media.MediaPlaybackSnapshot
+import com.pampa.widgets.core.settings.AppSettings
 import com.pampa.widgets.core.settings.MediaWidgetSettings
 
-/** Uses exactly the RemoteViews renderer, measured at the launcher's dimensions. */
+/**
+ * L'anteprima del widget con lo stesso renderer `RemoteViews` della home, alla misura del launcher.
+ *
+ * [appSettings] serve al tema «Come l'app»: i suoi colori vengono dall'aspetto dell'app, e senza
+ * l'anteprima mostrerebbe quelli di serie.
+ */
 @Composable
 internal fun MediaWidgetPreview(settings: MediaWidgetSettings, widthDp: Int = 320, heightDp: Int = 230,
-  snapshot: MediaPlaybackSnapshot? = null) {
+  snapshot: MediaPlaybackSnapshot? = null, appSettings: AppSettings = AppSettings()) {
   BoxWithConstraints(Modifier.fillMaxWidth()) {
     val width = widthDp.coerceAtLeast(100)
     val height = heightDp.coerceAtLeast(100)
@@ -28,13 +34,14 @@ internal fun MediaWidgetPreview(settings: MediaWidgetSettings, widthDp: Int = 32
           title = "La tua musica", artist = "Il prossimo brano preferito", sourceLabel = settings.source.label,
           packageName = settings.source.packageName.orEmpty(), isPlaying = true,
           canPlayPause = true, canSkipNext = true, canSkipPrevious = true, durationMs = 222000, positionMs = 74000)
-        val key = listOf(settings, width, height, sample)
+        val rendered = settings.applyTo(appSettings)
+        val key = listOf(rendered, width, height, sample, host.resources.configuration.uiMode)
         if (host.tag != key) {
           host.tag = key
           host.removeAllViews()
           host.targetWidth = (width * host.resources.displayMetrics.density).toInt()
           host.targetHeight = (height * host.resources.displayMetrics.density).toInt()
-          host.addView(MediaWidgetUpdater.buildRemoteViewsForTest(host.context, sample, settings.applyTo(), width, height).apply(host.context, host))
+          host.addView(MediaWidgetUpdater.buildRemoteViewsForTest(host.context, sample, rendered, width, height).apply(host.context, host))
           host.requestLayout()
         }
       })

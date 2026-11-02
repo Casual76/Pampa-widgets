@@ -1,218 +1,276 @@
 package com.pampa.widgets.ui.navigation
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.background
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.unit.dp
-import androidx.compose.animation.*
-import androidx.compose.animation.core.snap
-import dev.antigravity.fluidengine.ui.fluid.FluidButton
-import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidMotion
-import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
-import com.pampa.widgets.ui.store.MyWidgetsScreen
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Widgets
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavDestination
-import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import com.pampa.widgets.core.design.PampaWidgetsTheme
-import com.pampa.widgets.core.settings.StoreLayout
-import com.pampa.widgets.core.settings.ThemeMode
-import com.pampa.widgets.core.settings.WidgetSortMode
+import com.pampa.widgets.core.widget.WidgetPinResult
+import com.pampa.widgets.ui.MainActions
 import com.pampa.widgets.ui.MainUiState
 import com.pampa.widgets.ui.detail.WidgetDetailScreen
 import com.pampa.widgets.ui.settings.SettingsScreen
+import com.pampa.widgets.ui.store.MyWidgetsScreen
 import com.pampa.widgets.ui.store.StoreScreen
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.Alignment
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBar
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
+import dev.antigravity.fluidengine.ui.fluid.FluidNotification
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationHost
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScrollToTopBus
-import dev.antigravity.fluidengine.ui.fluid.FluidTabBar
-import dev.antigravity.fluidengine.ui.fluid.FluidTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidTabItem
+import dev.antigravity.fluidengine.ui.fluid.FluidUpdatePromptSheet
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.fluid.ProvideFluidChrome
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeController
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
-import androidx.compose.runtime.getValue
+import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.navigation.rememberFluidNavController
+import dev.antigravity.fluidengine.ui.page.FluidPeerMove
+import dev.antigravity.fluidengine.ui.page.rememberFluidPageHostState
+import kotlinx.coroutines.launch
 
 /**
- * Le due destinazioni della barra in basso, nella forma che l'engine legge.
+ * Le tre schede, nell'ordine della barra.
  *
- * FluidTabItem porta l'icona come ImageVector e non come composable: la barra ha bisogno di
- * disegnarla lei, a due opacita' diverse, per far scorrere la pillola sotto quella selezionata.
+ * L'ordine e' anche quello del passo fra schede: [tabPeer] lo legge da qui, cosi' la scheda nuova
+ * entra dal lato in cui sta nella barra invece che sempre da destra come una pagina spinta.
  */
-private val tabItems = listOf(
+internal val tabItems = listOf(
   FluidTabItem(route = AppRoutes.Store, label = "Widget", icon = Icons.Rounded.Widgets),
   FluidTabItem(route = AppRoutes.MyWidgets, label = "I miei", icon = Icons.Rounded.Home),
   FluidTabItem(route = AppRoutes.Settings, label = "Impostazioni", icon = Icons.Rounded.Settings),
 )
 
+/** La posizione di una rotta fra le schede, o -1 se non e' una scheda (il dettaglio di un widget). */
+internal fun tabIndexOf(route: String?): Int = tabItems.indexOfFirst { it.route == route }
+
+/**
+ * Il passo fra due schede: positivo se [to] sta dopo [from] nella barra, zero se una delle due non e'
+ * una scheda. Zero vuol dire "pagina": il dettaglio entra da destra e torna indietro sotto il dito.
+ */
+internal fun tabPeerDirection(from: String?, to: String?): Int {
+  val a = tabIndexOf(from)
+  val b = tabIndexOf(to)
+  return if (a < 0 || b < 0) 0 else b.compareTo(a)
+}
+
+private val tabPeer = FluidPeerMove<NavBackStackEntry> { from, to ->
+  tabPeerDirection(from.destination.route, to.destination.route)
+}
+
+/**
+ * La scheda accesa per la rotta in cima. Il dettaglio di un widget si apre solo dal catalogo, e la
+ * barra resta sulla sua scheda: e' la pagina dentro "Widget", non un posto a se'.
+ */
+internal fun selectedTabFor(route: String?): String? = when {
+  tabIndexOf(route) >= 0 -> route
+  route == AppRoutes.WidgetDetail -> AppRoutes.Store
+  else -> null
+}
+
 @Composable
 fun PampaWidgetsRoot(
   uiState: MainUiState,
-  onSearchQueryChange: (String) -> Unit,
-  onThemeModeChange: (ThemeMode) -> Unit,
-  onDynamicColorChange: (Boolean) -> Unit,
-  onStoreLayoutChange: (StoreLayout) -> Unit,
-  onWidgetSortModeChange: (WidgetSortMode) -> Unit,
-  onAutomaticUpdateChecksChange: (Boolean) -> Unit,
-  onCheckUpdate: () -> Unit,
-  onInstallUpdate: () -> Unit,
-  onDismissUpdate: () -> Unit,
-  onIgnoreUpdate: () -> Unit,
-  onClearUpdateMessage: () -> Unit,
-  onPinWidget: (String) -> Unit,
-  onClearWidgetPinMessage: () -> Unit,
-  onOpenMediaAccessSettings: () -> Unit,
+  actions: MainActions,
 ) {
   PampaWidgetsTheme(settings = uiState.settings) {
-    val navController = rememberNavController()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(uiState.updateMessage) {
-      val message = uiState.updateMessage
-      if (!message.isNullOrBlank()) {
-        snackbarHostState.showSnackbar(message)
-        onClearUpdateMessage()
-      }
-    }
-    LaunchedEffect(uiState.widgetPinMessage) {
-      val message = uiState.widgetPinMessage
-      if (!message.isNullOrBlank()) {
-        snackbarHostState.showSnackbar(message)
-        onClearWidgetPinMessage()
-      }
-    }
-
-    // La barra in vetro fluttua *sopra* il contenuto invece di occupare una fascia in fondo, e per
-    // questo il contenuto le scorre sotto e si vede sfocato attraverso. E' anche il motivo per cui
-    // non c'e' piu' uno Scaffold: la sua bottomBar toglie spazio, e non e' quello che vogliamo.
+    val navController = rememberFluidNavController()
+    val pageState = rememberFluidPageHostState()
     val chromeController = rememberFluidChromeController()
+    val modalHost = rememberFluidGlassModalHostState()
+    val notificationHost = rememberFluidNotificationHostState()
     val fallbackBackdrop = rememberGlassBackdrop()
+    val backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop
     val scrollToTop = remember { FluidScrollToTopBus() }
+    val tabBarScroll = rememberFluidFloatingTabBarScrollConnection()
+    val scope = rememberCoroutineScope()
+
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = backStackEntry?.destination
-    val selectedRoute = tabItems.firstOrNull { currentDestination.isInHierarchy(it.route) }?.route
+    val currentRoute = backStackEntry?.destination?.route
+    val selectedRoute = selectedTabFor(currentRoute)
 
-    val wide = LocalConfiguration.current.screenWidthDp >= 840
-    val showNavigation = selectedRoute != null
-    val reduced = LocalFluidMotionPolicy.current.reducedMotion
-    val routeMotion = if (reduced) snap<androidx.compose.ui.unit.IntOffset>() else FluidMotion.intOffset()
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-      ProvideFluidChrome(
-        controller = chromeController,
-        // Lo spazio che la barra occuperebbe viene restituito al contenuto come spaziatura in
-        // fondo: le liste finiscono sopra la barra invece che dietro.
-        bottomInset = if (showNavigation && !wide) FluidTabBarDefaults.ContentInset else 0.dp,
-        scrollToTop = scrollToTop,
-      ) {
-      NavHost(
-        navController = navController,
-        startDestination = AppRoutes.Store,
-        modifier = Modifier.fillMaxSize().padding(start = if (wide && showNavigation) 176.dp else 0.dp),
-        enterTransition = { slideInHorizontally(routeMotion) { it } },
-        exitTransition = { slideOutHorizontally(routeMotion) { -it } },
-        popEnterTransition = { slideInHorizontally(routeMotion) { -it } },
-        popExitTransition = { slideOutHorizontally(routeMotion) { it } },
-      ) {
-        composable(AppRoutes.Store) {
-          StoreScreen(
-            uiState = uiState,
-            onSearchQueryChange = onSearchQueryChange,
-            onStoreLayoutChange = onStoreLayoutChange,
-            onWidgetSortModeChange = onWidgetSortModeChange,
-            onPinWidget = onPinWidget,
-            onWidgetClick = { widgetId -> navController.navigate(AppRoutes.widgetDetail(widgetId)) },
-            onInstallUpdate = onInstallUpdate,
-            onDismissUpdate = onDismissUpdate,
-          )
-        }
-        composable(AppRoutes.MyWidgets) {
-          MyWidgetsScreen(uiState.settings) { navController.navigate(AppRoutes.Store) { launchSingleTop = true } }
-        }
-        composable(AppRoutes.Settings) {
-          SettingsScreen(
-            uiState = uiState,
-            onThemeModeChange = onThemeModeChange,
-            onDynamicColorChange = onDynamicColorChange,
-            onStoreLayoutChange = onStoreLayoutChange,
-            onWidgetSortModeChange = onWidgetSortModeChange,
-            onAutomaticUpdateChecksChange = onAutomaticUpdateChecksChange,
-            onCheckUpdate = onCheckUpdate,
-            onInstallUpdate = onInstallUpdate,
-            onIgnoreUpdate = onIgnoreUpdate,
-            mediaNotificationAccessGranted = uiState.mediaNotificationAccessGranted,
-            onOpenMediaAccessSettings = onOpenMediaAccessSettings,
-          )
-        }
-        composable(AppRoutes.WidgetDetail) { entry ->
-          val widgetId = entry.arguments?.getString("widgetId").orEmpty()
-          WidgetDetailScreen(
-            widget = uiState.widgets.firstOrNull { it.id == widgetId },
-            onBack = { navController.popBackStack() },
-            mediaNotificationAccessGranted = uiState.mediaNotificationAccessGranted,
-            onPinWidget = onPinWidget,
-            onOpenMediaAccessSettings = onOpenMediaAccessSettings,
-          )
-        }
-      }
-      }
+    // Il foglio dell'aggiornamento: lo apre l'avviso del catalogo, si chiude con «Più tardi».
+    var updateSheetOpen by rememberSaveable { mutableStateOf(false) }
 
-      if (showNavigation && !wide) FluidTabBar(
-        items = tabItems,
-        selectedRoute = selectedRoute,
-        onSelect = { item ->
-          navController.navigate(item.route) {
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-          }
-        },
-        onReselect = { scrollToTop.request() },
-        backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop,
-        modifier = Modifier.align(Alignment.BottomCenter),
-      )
+    // L'esito della richiesta al launcher, come notifica di vetro in cima: la vecchia Snackbar di
+    // Material stava in fondo, sotto la barra, e non era vetro.
+    var notificationCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(uiState.widgetPinMessage) {
+      val result = uiState.widgetPinMessage ?: return@LaunchedEffect
+      actions.onClearWidgetPinMessage()
+      val id = "pin-${++notificationCount}"
+      scope.launch { notificationHost.show(result.toNotification(id)) }
+    }
 
-      if (showNavigation && wide) {
-        Column(Modifier.width(176.dp).fillMaxHeight().statusBarsPadding().navigationBarsPadding().padding(12.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          tabItems.forEach { item -> FluidButton(item.label, {
-            navController.navigate(item.route) {
-              popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-              launchSingleTop = true; restoreState = true
+    CompositionLocalProvider(
+      LocalFluidGlassModalHostState provides modalHost,
+      LocalFluidNotificationHostState provides notificationHost,
+    ) {
+      Box(modifier = Modifier.fillMaxSize()) {
+        // La barra in vetro galleggia sopra le pagine e lo spazio che occuperebbe torna al contenuto
+        // come margine in fondo: le liste finiscono sopra la barra, non dietro.
+        ProvideFluidChrome(
+          controller = chromeController,
+          bottomInset = FluidFloatingTabBarDefaults.ContentInset,
+          scrollToTop = scrollToTop,
+        ) {
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .nestedScroll(tabBarScroll)
+              .fluidGlassModalObscured(),
+          ) {
+            FluidNavHost(
+              navController = navController,
+              startDestination = AppRoutes.Store,
+              modifier = Modifier.fillMaxSize(),
+              peer = tabPeer,
+              state = pageState,
+            ) {
+              composable(AppRoutes.Store) {
+                StoreScreen(
+                  uiState = uiState,
+                  actions = actions,
+                  onWidgetClick = { widgetId -> navController.navigate(AppRoutes.widgetDetail(widgetId)) },
+                  onOpenUpdate = { updateSheetOpen = true },
+                )
+              }
+              composable(AppRoutes.MyWidgets) {
+                MyWidgetsScreen(
+                  app = uiState.settings,
+                  onCatalog = { navigateToTab(navController, AppRoutes.Store) },
+                )
+              }
+              composable(AppRoutes.Settings) {
+                SettingsScreen(uiState = uiState, actions = actions)
+              }
+              composable(AppRoutes.WidgetDetail) { entry ->
+                val widgetId = entry.arguments?.getString("widgetId").orEmpty()
+                WidgetDetailScreen(
+                  widget = uiState.widgets.firstOrNull { it.id == widgetId },
+                  onBack = { navController.popBackStack() },
+                  mediaNotificationAccessGranted = uiState.mediaNotificationAccessGranted,
+                  onPinWidget = actions.onPinWidget,
+                  onOpenMediaAccessSettings = actions.onOpenMediaAccessSettings,
+                )
+              }
             }
-          }, fillWidth = true,
-            style = if (selectedRoute == item.route) FluidButtonStyle.Filled else FluidButtonStyle.Plain,
-            leading = { Icon(item.icon, contentDescription = null) }) }
+          }
         }
-      }
 
-      SnackbarHost(
-        hostState = snackbarHostState,
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .padding(bottom = FluidTabBarDefaults.ContentInset),
-      )
+        Box(
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .navigationBarsPadding()
+            .padding(
+              horizontal = FluidFloatingTabBarDefaults.HorizontalMargin,
+              vertical = FluidFloatingTabBarDefaults.BottomMargin,
+            ),
+        ) {
+          FluidFloatingTabBar(
+            items = tabItems,
+            selectedRoute = selectedRoute,
+            onSelect = { item -> navigateToTab(navController, item.route) },
+            // Un secondo tocco sulla scheda gia' scelta: sopra una pagina torna alla scheda, sulla
+            // scheda torna in cima.
+            onReselect = { item ->
+              if (currentRoute != item.route) {
+                navController.popBackStack(item.route, inclusive = false)
+              } else {
+                scrollToTop.request()
+              }
+            },
+            scrollConnection = tabBarScroll,
+            backdrop = backdrop,
+          )
+        }
+
+        FluidUpdatePromptSheet(
+          state = if (updateSheetOpen) uiState.update.ui else null,
+          onInstall = actions.onInstallUpdate,
+          onLater = {
+            updateSheetOpen = false
+            actions.onDismissUpdate()
+          },
+          onSkip = {
+            updateSheetOpen = false
+            actions.onIgnoreUpdate()
+          },
+        )
+
+        // Sopra la barra: un pop-up sotto cui la capsula di navigazione puo' passare non e' un modale.
+        FluidGlassModalHost(state = modalHost, backdrop = backdrop)
+        FluidNotificationHost(
+          state = notificationHost,
+          backdrop = backdrop,
+          modifier = Modifier.align(Alignment.TopCenter),
+        )
+      }
     }
   }
 }
 
-private fun NavDestination?.isInHierarchy(route: String): Boolean {
-  return this?.hierarchy?.any { it.route == route } == true
+/** Le schede si scambiano tenendo lo stato di ciascuna, e la radice resta il catalogo. */
+private fun navigateToTab(navController: androidx.navigation.NavHostController, route: String) {
+  navController.navigate(route) {
+    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+    launchSingleTop = true
+    restoreState = true
+  }
+}
+
+private fun WidgetPinResult.toNotification(id: String): FluidNotification = when (this) {
+  WidgetPinResult.Requested -> FluidNotification(
+    id = id,
+    title = "Aggiungi alla home",
+    message = "Richiesta inviata al launcher: conferma dove metterlo.",
+    tone = FluidNotificationTone.Success,
+    durationMillis = 4_000L,
+  )
+  WidgetPinResult.NotFound -> FluidNotification(
+    id = id,
+    title = "Widget non trovato",
+    message = "Questo widget non e' piu' nel catalogo.",
+    tone = FluidNotificationTone.Error,
+  )
+  WidgetPinResult.NoProvider -> FluidNotification(
+    id = id,
+    title = "Non ancora installabile",
+    message = "Questo widget non ha ancora un provider da aggiungere alla home.",
+    tone = FluidNotificationTone.Warning,
+  )
+  WidgetPinResult.Unsupported -> FluidNotification(
+    id = id,
+    title = "Il launcher non lo permette",
+    message = "Tieni premuta la home, apri «Widget» e cerca Pampa Widgets.",
+    tone = FluidNotificationTone.Warning,
+  )
 }

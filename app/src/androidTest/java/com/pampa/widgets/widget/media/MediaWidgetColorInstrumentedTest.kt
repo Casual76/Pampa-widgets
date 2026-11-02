@@ -17,7 +17,8 @@ class MediaWidgetColorInstrumentedTest {
 
   @Test
   fun backgroundAndPlayButtonAreOpaqueAndTonallySeparated() {
-    MediaWidgetTheme.entries.forEach { theme ->
+    // «Come l'app» non viene dalla copertina: i suoi colori li prova MediaWidgetAppThemeTest.
+    MediaWidgetTheme.entries.filter { it != MediaWidgetTheme.AppTheme }.forEach { theme ->
       sampleAccents.forEach { accent ->
         val background = accent.toWidgetBackgroundColor(theme)
         val darkSurface = when (theme) {

@@ -2,6 +2,7 @@ package com.pampa.widgets.widget.media
 
 import android.app.Notification
 import android.content.ComponentName
+import android.content.res.Configuration
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.service.notification.NotificationListenerService
@@ -13,6 +14,7 @@ class MediaNotificationListenerService : NotificationListenerService() {
   private var mediaSessionManager: MediaSessionManager? = null
   private var isSessionCallbackRegistered = false
   private var observedControllers = emptyList<MediaController>()
+  private var lastUiMode = Configuration.UI_MODE_NIGHT_UNDEFINED
 
   private val controllerCallback = object : MediaController.Callback() {
     override fun onPlaybackStateChanged(state: android.media.session.PlaybackState?) {
@@ -38,6 +40,22 @@ class MediaNotificationListenerService : NotificationListenerService() {
   override fun onCreate() {
     super.onCreate()
     mediaSessionManager = getSystemService(MediaSessionManager::class.java)
+    lastUiMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+  }
+
+  /**
+   * Il telefono e' passato dal chiaro allo scuro (o il contrario). Un widget «Come l'app» con l'app che
+   * segue il sistema deve cambiare con lui, e un `RemoteViews` ha i colori gia' decisi: lo ridisegna
+   * qualcuno che e' vivo quando succede. Questo servizio lo e' finche' l'accesso alle notifiche e'
+   * attivo, cioe' sempre quando il widget funziona.
+   */
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    val uiMode = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+    if (uiMode != lastUiMode) {
+      lastUiMode = uiMode
+      MediaWidgetUpdateCoordinator.requestUpdate(applicationContext, MediaWidgetUpdateReason.Settings)
+    }
   }
 
   override fun onListenerConnected() {

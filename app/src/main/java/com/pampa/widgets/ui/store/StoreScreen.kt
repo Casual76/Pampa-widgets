@@ -1,304 +1,250 @@
 package com.pampa.widgets.ui.store
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.InstallMobile
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SortByAlpha
-import androidx.compose.material.icons.rounded.ViewAgenda
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.SystemUpdateAlt
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Widgets
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import com.pampa.widgets.widget.media.ChoiceButtons
-import com.pampa.widgets.widget.media.MediaWidgetPreview
-import com.pampa.widgets.core.settings.MediaWidgetSettings
-import dev.antigravity.fluidengine.ui.fluid.*
-import dev.antigravity.fluidengine.ui.theme.FluidCard
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.pampa.widgets.core.settings.MediaWidgetSettings
 import com.pampa.widgets.core.settings.StoreLayout
 import com.pampa.widgets.core.settings.WidgetSortMode
-import com.pampa.widgets.core.update.AppUpdateInstallState
 import com.pampa.widgets.core.update.isBusy
 import com.pampa.widgets.core.widget.WidgetDefinition
+import com.pampa.widgets.ui.MainActions
 import com.pampa.widgets.ui.MainUiState
-import androidx.compose.foundation.lazy.LazyListScope
+import com.pampa.widgets.widget.media.MediaWidgetPreview
+import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
+import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
+import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
+import dev.antigravity.fluidengine.ui.fluid.FluidMenuOpensOn
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import androidx.compose.ui.platform.LocalConfiguration
+import dev.antigravity.fluidengine.ui.fluid.FluidSearchField
+import dev.antigravity.fluidengine.ui.fluid.FluidSearchLabels
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidCanvasBackdrop
+import dev.antigravity.fluidengine.ui.fluid.fluidGridItems
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
+import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.antigravity.fluidengine.ui.theme.FluidCard
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.antigravity.fluidengine.ui.theme.FluidToneTile
 
+/**
+ * Il catalogo.
+ *
+ * Una pagina sola che scorre, col fondale del catalogo dietro: le card dei widget sono vetro su quel
+ * fondale, la ricerca e' una lastra di vetro in pagina, e la vista e l'ordine — che prima erano due
+ * file di pulsanti in cima, cioe' una pagina da cui non si poteva scorrere partendo dai pulsanti —
+ * stanno nel menu del tasto della barra, che si apre al tocco come i tre puntini di iOS.
+ */
 @Composable
 fun StoreScreen(
   uiState: MainUiState,
-  onSearchQueryChange: (String) -> Unit,
-  onStoreLayoutChange: (StoreLayout) -> Unit,
-  onWidgetSortModeChange: (WidgetSortMode) -> Unit,
+  actions: MainActions,
   onWidgetClick: (String) -> Unit,
-  onPinWidget: (String) -> Unit,
-  onInstallUpdate: () -> Unit,
-  onDismissUpdate: () -> Unit,
+  onOpenUpdate: () -> Unit,
 ) {
-  // Il conteggio dei widget passa da una pastiglia accanto al titolo a una faccetta della barra:
-  // FluidScreen le fa scorrere una dopo l'altra quando il titolo grande si e' ritirato, quindi
-  // l'informazione resta raggiungibile senza occupare spazio nella pagina.
-  // Quante colonne stanno davvero nella larghezza, con la stessa regola di GridCells.Adaptive:
-  // (larghezza + spazio) / (minimo + spazio), almeno una. Su un telefono in verticale fa **una**,
-  // non due: fissarle a due schiacciava l'unica card a meta' schermo con il titolo troncato.
-  val available = LocalConfiguration.current.screenWidthDp.dp - HorizontalPadding * 2
-  val gridColumns = maxOf(
-    1,
-    ((available + CardSpacing) / (MinimumCardWidth + CardSpacing)).toInt(),
-  )
+  val metrics = rememberFluidScreenMetrics()
+  val layout = uiState.settings.storeLayout
+  val sortMode = uiState.settings.widgetSortMode
 
   FluidScreen(
     modifier = Modifier.testTag("store-screen"),
     title = "Pampa Widgets",
     subtitle = "La tua musica, a portata di home.",
+    // Il conteggio sta nella barra: compare quando il titolo grande si e' ritirato.
     titleFacets = listOf("${uiState.widgets.size} widget"),
-    itemSpacing = 18.dp,
+    ambient = remember { FluidAmbient(tone = FluidHeroTone.Primary, motif = FluidHeroMotif.Cards) },
+    metrics = metrics,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Tune,
+        contentDescription = "Vista e ordine",
+        onClick = {},
+        opensOn = FluidMenuOpensOn.Tap,
+        actions = {
+          storeMenu(
+            layout = layout,
+            sortMode = sortMode,
+            onLayout = actions.onStoreLayoutChange,
+            onSort = actions.onWidgetSortModeChange,
+          )
+        },
+      )
+    },
   ) {
-    if (uiState.availableUpdate != null && !uiState.isUpdateDismissedForSession) {
-      item(key = "update-banner") {
-        UpdateBanner(
-          version = uiState.availableUpdate.version,
-          installState = uiState.updateInstallState,
-          onInstall = onInstallUpdate,
-          onDismiss = onDismissUpdate,
+    val update = uiState.update
+    val available = update.available
+    if (available != null && !update.dismissedForSession) {
+      item(key = "update") {
+        FluidInlineMessage(
+          title = "Aggiornamento ${available.version}",
+          message = if (update.installState.isBusy()) {
+            "Installazione in corso."
+          } else {
+            "Disponibile tramite Pampa Store."
+          },
+          tone = FluidTone.Info,
+          leading = { Icon(Icons.Rounded.SystemUpdateAlt, contentDescription = null) },
+          action = "Vedi le novità",
+          onClick = onOpenUpdate,
+          onDismiss = actions.onDismissUpdate,
+          modifier = Modifier.testTag("store-update"),
         )
       }
     }
 
-    item(key = "controls") {
-      StoreControls(
+    item(key = "search") {
+      FluidSearchField(
         query = uiState.searchQuery,
-        layout = uiState.settings.storeLayout,
-        sortMode = uiState.settings.widgetSortMode,
-        onSearchQueryChange = onSearchQueryChange,
-        onStoreLayoutChange = onStoreLayoutChange,
-        onWidgetSortModeChange = onWidgetSortModeChange,
+        onQueryChange = actions.onSearchQueryChange,
+        modifier = Modifier.fillMaxWidth().testTag("widget-search"),
+        // Il vetro in pagina rifrange il fondale, mai la registrazione della pagina che lo contiene.
+        backdrop = LocalFluidCanvasBackdrop.current ?: rememberGlassBackdrop(),
+        placeholder = "Cerca widget",
+        labels = FluidSearchLabels(search = "Cerca widget"),
+        // Sempre in pagina: una tastiera che salisse da sola all'apertura coprirebbe il catalogo.
+        autoFocus = false,
       )
     }
 
     if (uiState.visibleWidgets.isEmpty()) {
       item(key = "empty") {
-        EmptyStoreState(
-          query = uiState.searchQuery,
-          totalWidgets = uiState.widgets.size,
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("store-empty-state"),
-        )
+        val searching = uiState.searchQuery.isNotBlank()
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          FluidEmptyState(
+            title = if (searching) "Nessun risultato" else "Nessun widget disponibile",
+            detail = if (searching) {
+              "Nessuno dei ${uiState.widgets.size} widget corrisponde alla ricerca."
+            } else {
+              "Lo scaffale e' pronto: i widget arrivano con i prossimi aggiornamenti dell'app."
+            },
+            illustration = {
+              Icon(Icons.Rounded.Widgets, contentDescription = null, modifier = Modifier.size(64.dp))
+            },
+            modifier = Modifier.testTag("store-empty-state"),
+          )
+          if (searching) {
+            FluidButton(
+              text = "Svuota la ricerca",
+              onClick = { actions.onSearchQueryChange("") },
+              style = FluidButtonStyle.Tinted,
+            )
+          }
+        }
       }
     } else {
-      widgetItems(
-        widgets = uiState.visibleWidgets,
-        layout = uiState.settings.storeLayout,
-        columns = gridColumns,
-        onWidgetClick = onWidgetClick,
-        onPinWidget = onPinWidget,
-      )
+      // Le colonne si leggono qui, dentro la lista: la schermata scrive la sua larghezza nello stesso
+      // passaggio, e il primo fotogramma ha gia' le colonne giuste.
+      fluidGridItems(
+        items = uiState.visibleWidgets,
+        columns = if (layout == StoreLayout.List) 1 else metrics.columns(minColumn = FluidColumnsDefaults.MinCard),
+        key = { it.id },
+      ) { widget ->
+        WidgetCard(
+          widget = widget,
+          onClick = { onWidgetClick(widget.id) },
+          onPin = { actions.onPinWidget(widget.id) },
+        )
+      }
     }
   }
 }
 
 /**
- * I widget, emessi nella lista della schermata invece che in una lista propria.
- *
- * Una lista dentro un'altra lista non scorre: la interna prende il gesto e la pagina resta ferma,
- * quindi il titolo grande non si ritira mai e il bordo elastico non si sente. La griglia diventa
- * righe di due, che e' quello che l'adattiva faceva comunque a queste larghezze.
+ * Le voci del menu «Vista e ordine»: due sezioni, la scelta corrente con la spunta a destra come
+ * nei menu di iOS. Scegliere la voce gia' scelta non scrive niente.
  */
-private fun LazyListScope.widgetItems(
-  widgets: List<WidgetDefinition>,
-  layout: StoreLayout,
-  columns: Int,
-  onWidgetClick: (String) -> Unit,
-  onPinWidget: (String) -> Unit,
-) {
-  if (layout == StoreLayout.List || columns <= 1) {
-    items(widgets, key = { it.id }) { widget ->
-      WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) }, onPin = { onPinWidget(widget.id) })
-    }
-    return
-  }
-  val rows = widgets.chunked(columns)
-  items(rows, key = { row -> row.first().id }) { row ->
-    Row(horizontalArrangement = Arrangement.spacedBy(CardSpacing)) {
-      row.forEach { widget ->
-        Box(modifier = Modifier.weight(1f)) {
-          WidgetCard(widget = widget, onClick = { onWidgetClick(widget.id) }, onPin = { onPinWidget(widget.id) })
-        }
-      }
-      // Tiene le card di una riga incompleta larghe quanto le altre invece di lasciarle
-      // allargare fino a riempire la riga.
-      repeat(columns - row.size) { Spacer(modifier = Modifier.weight(1f)) }
-    }
-  }
-}
-
-private val MinimumCardWidth = 280.dp
-private val CardSpacing = 12.dp
-private val HorizontalPadding = 20.dp
-
-@Composable
-private fun UpdateBanner(
-  version: String,
-  installState: AppUpdateInstallState,
-  onInstall: () -> Unit,
-  onDismiss: () -> Unit,
-) {
-  Surface(
-    modifier = Modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.large,
-    color = MaterialTheme.colorScheme.tertiaryContainer,
-    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-  ) {
-    Row(
-      modifier = Modifier.padding(16.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Icon(Icons.Rounded.InstallMobile, contentDescription = null)
-      Column(modifier = Modifier.weight(1f)) {
-        Text("Aggiornamento $version disponibile", fontWeight = FontWeight.SemiBold)
-        Text(
-          text = if (installState.isBusy()) "Installazione in corso" else "Disponibile tramite Pampa Store.",
-          style = MaterialTheme.typography.bodySmall,
-        )
-      }
-      FluidButton("Installa", onInstall, enabled = !installState.isBusy())
-      IconButton(onClick = onDismiss) {
-        Icon(Icons.Rounded.Close, contentDescription = "Nascondi")
-      }
-    }
-  }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-private fun StoreControls(
-  query: String,
+private fun storeMenu(
   layout: StoreLayout,
   sortMode: WidgetSortMode,
-  onSearchQueryChange: (String) -> Unit,
-  onStoreLayoutChange: (StoreLayout) -> Unit,
-  onWidgetSortModeChange: (WidgetSortMode) -> Unit,
-) {
-  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    FluidTextField(value = query, onValueChange = onSearchQueryChange,
-      modifier = Modifier.fillMaxWidth().testTag("widget-search"),
-      label = "Cerca widget", placeholder = "Musica, orologio, sistema…",
-      leading = { Icon(Icons.Rounded.Search, contentDescription = null) })
-
-    ChoiceButtons(StoreLayout.entries, layout, onStoreLayoutChange) { if (it == StoreLayout.Grid) "Griglia" else "Lista" }
-    ChoiceButtons(WidgetSortMode.entries, sortMode, onWidgetSortModeChange) { if (it == WidgetSortMode.Featured) "In evidenza" else "Nome" }
+  onLayout: (StoreLayout) -> Unit,
+  onSort: (WidgetSortMode) -> Unit,
+): List<FluidContextAction> = buildList {
+  StoreLayout.entries.forEach { option ->
+    add(
+      FluidContextAction(
+        label = if (option == StoreLayout.Grid) "Griglia" else "Lista",
+        icon = Icons.Rounded.Check.takeIf { option == layout },
+      ) { if (option != layout) onLayout(option) },
+    )
+  }
+  WidgetSortMode.entries.forEachIndexed { index, option ->
+    add(
+      FluidContextAction(
+        label = if (option == WidgetSortMode.Featured) "In evidenza" else "Per nome",
+        icon = Icons.Rounded.Check.takeIf { option == sortMode },
+        startsSection = index == 0,
+      ) { if (option != sortMode) onSort(option) },
+    )
   }
 }
 
-@Composable
-private fun EmptyStoreState(
-  query: String,
-  totalWidgets: Int,
-  modifier: Modifier = Modifier,
-) {
-  Box(
-    modifier = modifier,
-    contentAlignment = Alignment.Center,
-  ) {
-    Column(
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(14.dp),
-      modifier = Modifier.padding(horizontal = 12.dp),
-    ) {
-      Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-      ) {
-        Icon(
-          imageVector = Icons.Rounded.Widgets,
-          contentDescription = null,
-          modifier = Modifier
-            .padding(22.dp)
-            .size(44.dp),
-        )
-      }
-      Text(
-        text = if (query.isBlank()) "Nessun widget disponibile" else "Nessun risultato",
-        style = MaterialTheme.typography.headlineSmall,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center,
-      )
-      Text(
-        text = if (query.isBlank()) {
-          "Lo scaffale e' pronto. I widget arriveranno con i prossimi aggiornamenti dell'app."
-        } else {
-          "Nessun widget corrisponde alla ricerca."
-        },
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-      )
-      AssistChip(
-        onClick = {},
-        label = {
-          Text(
-            if (query.isBlank()) {
-              "$totalWidgets widget registrati"
-            } else {
-              "0 risultati su $totalWidgets widget"
-            },
-          )
-        },
-        leadingIcon = { Icon(Icons.Rounded.Widgets, contentDescription = null, modifier = Modifier.size(18.dp)) },
-      )
-    }
-  }
-}
-
+/**
+ * Un widget del catalogo: una card di vetro che si tocca per i dettagli, con l'anteprima vera (lo
+ * stesso `RemoteViews` della home) e i due tasti.
+ *
+ * I tasti stanno in una lista che scorre e si ripetono per ogni widget: cedono il dito alla pagina
+ * (`YieldsToScroll`), altrimenti un pollice posato su un tasto non farebbe scorrere il catalogo.
+ */
 @Composable
 private fun WidgetCard(widget: WidgetDefinition, onClick: () -> Unit, onPin: () -> Unit) {
-  FluidCard(animateContent = false) {
-    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-      Text(widget.name, style = MaterialTheme.typography.titleLarge)
+  FluidCard(glass = true, onClick = onClick, animateContent = false) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+      Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        FluidToneTile(tone = FluidTone.Primary) {
+          Icon(widget.icon ?: Icons.Rounded.GraphicEq, contentDescription = null)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+          Text(widget.name, style = MaterialTheme.typography.titleLarge)
+          Text(
+            text = "Spotify · Fluidify · Automatica",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+          )
+        }
+      }
       MediaWidgetPreview(MediaWidgetSettings())
-      Text("Spotify · Fluidify · Automatica", style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary)
-      Text("Da 2 × 2 a tutta pagina. Sorgente, colori e controlli indipendenti per ogni widget.",
-        style = MaterialTheme.typography.bodyMedium)
-      FluidButton("Aggiungi alla home", onPin, fillWidth = true)
-      FluidButton("Scopri il widget", onClick, style = FluidButtonStyle.Plain, fillWidth = true)
+      Text(
+        text = "Da 2 × 2 a tutta pagina. Sorgente, colori e controlli indipendenti per ogni widget.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      FluidButton(
+        text = "Aggiungi alla home",
+        onClick = onPin,
+        fillWidth = true,
+        grip = FluidPressGrip.YieldsToScroll,
+      )
+      FluidButton(
+        text = "Scopri il widget",
+        onClick = onClick,
+        style = FluidButtonStyle.Plain,
+        fillWidth = true,
+        grip = FluidPressGrip.YieldsToScroll,
+      )
     }
   }
 }
