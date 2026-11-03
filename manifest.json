@@ -12,27 +12,34 @@
       "repoOwner": "Casual76",
       "repoName": "Pampa-widgets",
       "manifestPath": "manifest.json",
-      "ref": ""
+      "ref": "main"
     },
     "stable": {
-      "version": "0.4.0",
-      "releaseDate": "2026-08-23",
-      "changelog": "Le due schermate sono state ricostruite sul linguaggio condiviso con le altre app: il titolo grande si ritira nella barra mentre scorri, la barra in basso e' in vetro e lascia intravedere il contenuto che le passa sotto, e le liste cedono in fondo invece di fermarsi di colpo. Il conteggio dei widget si e' spostato nella barra, dove compare quando il titolo si ritira. Corretta anche la griglia del catalogo, che su un telefono in verticale schiacciava le schede a meta' schermo troncandone il testo.",
-      "releaseTag": "stable-pampa-widgets-v0.4.0",
-      "apkAsset": "pampa-widgets-0.4.0.apk",
-      "exeAsset": "",
-      "sizeBytes": 54301985
+      "version": "0.5.0",
+      "releaseDate": "2026-11-03",
+      "changelog": "Nuovo aspetto sul Fluid Engine 3: pagine che seguono il dito, vetro vero, impostazioni con tema, nero assoluto, accento e aptica; nuovo tema del widget «Come l'app». Il gesto indietro parte dal bordo dello schermo. Licenza GPL-3.0.",
+      "releaseTag": "stable-pampa-widgets-v0.5.0",
+      "apkAsset": "pampa-widgets-0.5.0.apk",
+      "sizeBytes": 54115443
     },
     "beta": {
-      "version": "0.4.0",
-      "releaseDate": "2026-08-23",
-      "changelog": "Le due schermate sono state ricostruite sul linguaggio condiviso con le altre app: il titolo grande si ritira nella barra mentre scorri, la barra in basso e' in vetro e lascia intravedere il contenuto che le passa sotto, e le liste cedono in fondo invece di fermarsi di colpo. Il conteggio dei widget si e' spostato nella barra, dove compare quando il titolo si ritira. Corretta anche la griglia del catalogo, che su un telefono in verticale schiacciava le schede a meta' schermo troncandone il testo.",
-      "releaseTag": "stable-pampa-widgets-v0.4.0",
-      "apkAsset": "pampa-widgets-0.4.0.apk",
-      "exeAsset": "",
-      "sizeBytes": 54301985
+      "version": "0.5.0",
+      "releaseDate": "2026-11-03",
+      "changelog": "Nuovo aspetto sul Fluid Engine 3: pagine che seguono il dito, vetro vero, impostazioni con tema, nero assoluto, accento e aptica; nuovo tema del widget «Come l'app». Il gesto indietro parte dal bordo dello schermo. Licenza GPL-3.0.",
+      "releaseTag": "stable-pampa-widgets-v0.5.0",
+      "apkAsset": "pampa-widgets-0.5.0.apk",
+      "sizeBytes": 54115443
     },
     "history": [
+      {
+        "version": "0.4.0",
+        "releaseDate": "2026-08-23",
+        "changelog": "Le due schermate sono state ricostruite sul linguaggio condiviso con le altre app: il titolo grande si ritira nella barra mentre scorri, la barra in basso e' in vetro e lascia intravedere il contenuto che le passa sotto, e le liste cedono in fondo invece di fermarsi di colpo. Il conteggio dei widget si e' spostato nella barra, dove compare quando il titolo si ritira. Corretta anche la griglia del catalogo, che su un telefono in verticale schiacciava le schede a meta' schermo troncandone il testo.",
+        "releaseTag": "stable-pampa-widgets-v0.4.0",
+        "apkAsset": "pampa-widgets-0.4.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 54301985
+      },
       {
         "version": "0.3.2",
         "releaseDate": "2026-08-22",
