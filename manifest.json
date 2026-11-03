@@ -15,22 +15,30 @@
       "ref": "main"
     },
     "stable": {
-      "version": "0.5.0",
+      "version": "0.5.1",
       "releaseDate": "2026-11-03",
-      "changelog": "Nuovo aspetto sul Fluid Engine 3: pagine che seguono il dito, vetro vero, impostazioni con tema, nero assoluto, accento e aptica; nuovo tema del widget «Come l'app». Il gesto indietro parte dal bordo dello schermo. Licenza GPL-3.0.",
-      "releaseTag": "stable-pampa-widgets-v0.5.0",
-      "apkAsset": "pampa-widgets-0.5.0.apk",
-      "sizeBytes": 54115443
+      "changelog": "Engine 3.0.4: gli interruttori si trascinano, i menu si aprono veloci come si chiudono, il gesto indietro non scatta più col dito fermo; piccole correzioni di accessibilità.",
+      "releaseTag": "stable-pampa-widgets-v0.5.1",
+      "apkAsset": "pampa-widgets-0.5.1.apk",
+      "sizeBytes": 54148212
     },
     "beta": {
-      "version": "0.5.0",
+      "version": "0.5.1",
       "releaseDate": "2026-11-03",
-      "changelog": "Nuovo aspetto sul Fluid Engine 3: pagine che seguono il dito, vetro vero, impostazioni con tema, nero assoluto, accento e aptica; nuovo tema del widget «Come l'app». Il gesto indietro parte dal bordo dello schermo. Licenza GPL-3.0.",
-      "releaseTag": "stable-pampa-widgets-v0.5.0",
-      "apkAsset": "pampa-widgets-0.5.0.apk",
-      "sizeBytes": 54115443
+      "changelog": "Engine 3.0.4: gli interruttori si trascinano, i menu si aprono veloci come si chiudono, il gesto indietro non scatta più col dito fermo; piccole correzioni di accessibilità.",
+      "releaseTag": "stable-pampa-widgets-v0.5.1",
+      "apkAsset": "pampa-widgets-0.5.1.apk",
+      "sizeBytes": 54148212
     },
     "history": [
+      {
+        "version": "0.5.0",
+        "releaseDate": "2026-11-03",
+        "changelog": "Nuovo aspetto sul Fluid Engine 3: pagine che seguono il dito, vetro vero, impostazioni con tema, nero assoluto, accento e aptica; nuovo tema del widget «Come l'app». Il gesto indietro parte dal bordo dello schermo. Licenza GPL-3.0.",
+        "releaseTag": "stable-pampa-widgets-v0.5.0",
+        "apkAsset": "pampa-widgets-0.5.0.apk",
+        "sizeBytes": 54115443
+      },
       {
         "version": "0.4.0",
         "releaseDate": "2026-08-23",
